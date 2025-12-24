@@ -1,39 +1,98 @@
 <?php
-use Illuminate\Support\Facades\DB;
+
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\OrderController;
+use App\Http\Controllers\AdminOrderController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\UserController;
+use App\Models\Order;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
 
-Route::get('/debug-final', function () {
-    $results = [];
+/*
+|--------------------------------------------------------------------------
+| Web Routes
+|--------------------------------------------------------------------------
+*/
 
-    // 1. Cek Koneksi Database & SSL
-    try {
-        $pdo = DB::connection()->getPdo();
-        $sslStatus = DB::select("SHOW STATUS LIKE 'Ssl_cipher'");
-        $results['database'] = [
-            'status' => 'TERKONEKSI',
-            'database_name' => DB::connection()->getDatabaseName(),
-            'ssl_used' => !empty($sslStatus) ? $sslStatus[0]->Value : 'TIDAK PAKAI SSL (Bahaya!)',
-        ];
-    } catch (\Exception $e) {
-        $results['database'] = ['status' => 'GAGAL', 'error' => $e->getMessage()];
-    }
+// 1. Landing Page
+Route::get('/', function () {
+    return view('welcome');
+})->name('home');
 
-    // 2. Cek Data User yang Sedang Login
-    if (Auth::check()) {
-        $results['auth'] = [
-            'status' => 'LOGGED_IN',
-            'user_email' => Auth::user()->email,
-            'user_role' => Auth::user()->role, // Ini yang bikin Dashboard error kalau kosong
-        ];
-    } else {
-        $results['auth'] = ['status' => 'NOT_LOGGED_IN', 'pesan' => 'Anda belum login atau session hilang'];
-    }
+// 2. Tentang Kami
+Route::view('/about', 'user.about')->name('about');
 
-    // 3. Cek Konfigurasi Serverless
-    $results['server_env'] = [
-        'session_driver' => config('session.driver'),
-        'app_key_exists' => !empty(config('app.key')),
-    ];
+// 3. Auth Group
+Route::middleware('auth')->group(function () {
+    
+    // Dashboard Universal
+    Route::get('/dashboard', [DashboardController::class, 'index'])
+        ->middleware(['verified'])
+        ->name('dashboard');
 
-    return response()->json($results);
+    // Profile
+    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+    // --- ROLE: USER ONLY ---
+    Route::middleware(['verified', 'role:user'])->group(function () {
+        
+        /**
+         * FITUR 1: PEMESANAN PAKET (Halaman Khusus)
+         * Menggunakan OrderController
+         */
+        Route::get('/order/create', [OrderController::class, 'create'])->name('order.create');
+        Route::post('/order/store', [OrderController::class, 'store'])->name('order.store');
+        
+        /**
+         * FIX: TAMBAHAN ROUTE FINALIZE
+         * Digunakan untuk menyimpan data permanen setelah pop-up Midtrans muncul
+         */
+        Route::post('/order/finalize', [OrderController::class, 'finalize'])->name('order.finalize');
+        
+        /**
+         * FITUR 2: PEMESANAN SATUAN (Dari Dashboard)
+         * Menggunakan UserController agar tetap berfungsi
+         */
+        Route::get('/order/new', [UserController::class, 'create'])->name('orders.create'); 
+        Route::post('/order/save', [UserController::class, 'store'])->name('orders.store'); 
+
+        /**
+         * STATUS, RIWAYAT & DETAIL
+         * Menggunakan OrderController sebagai pusat data pesanan
+         */
+        // Route Status: Menampilkan pesanan aktif (Pending/Proses)
+        // Arahkan ke method index di OrderController
+        Route::get('/status-pesanan', [OrderController::class, 'index'])->name('user.status');
+        
+        // Route Riwayat: Menampilkan pesanan yang sudah selesai/seluruhnya
+        // Jika Anda ingin tampilan berbeda, Anda bisa membuat method 'history' di OrderController
+        Route::get('/riwayat-pesanan', [OrderController::class, 'index'])->name('user.history');
+        
+        // Route Detail Pesanan
+        Route::get('/order-detail/{order}', [OrderController::class, 'show'])->name('order.show');
+
+        /**
+         * PEMBATALAN PESANAN
+         * Mendukung pemanggilan dari kedua Controller
+         */
+        Route::delete('/user/order/{id}', [OrderController::class, 'destroy'])->name('user.order.destroy');
+        Route::delete('/order/cancel/{id}', [UserController::class, 'destroy'])->name('order.destroy'); 
+    });
+
+    // --- ROLE: ADMIN ONLY ---
+    Route::middleware(['verified', 'role:admin'])->prefix('admin')->group(function () {
+        Route::get('/dashboard', [AdminOrderController::class, 'index'])->name('admin.dashboard');
+        Route::get('/users', [AdminOrderController::class, 'userIndex'])->name('admin.users');
+        
+        // Proses Admin (Store, Update, Delete)
+        Route::post('/order/store', [AdminOrderController::class, 'store'])->name('admin.order.store');
+        Route::patch('/order/{order}/{status}', [AdminOrderController::class, 'updateStatus'])->name('admin.order.update');
+        Route::delete('/order/{order}', [AdminOrderController::class, 'destroy'])->name('admin.order.destroy');
+    });
+
 });
+
+require __DIR__.'/auth.php';
