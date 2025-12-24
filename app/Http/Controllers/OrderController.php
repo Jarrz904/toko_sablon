@@ -16,7 +16,6 @@ class OrderController extends Controller
 {
     /**
      * Menampilkan daftar pesanan di halaman status atau riwayat.
-     * Diperbaiki agar mendukung variabel $activeOrders dan $completedOrders.
      */
     public function index()
     {
@@ -32,19 +31,18 @@ class OrderController extends Controller
             
             return view('user.status', [
                 'activeOrders' => $activeOrders,
-                'orders' => $allOrders, // Backup agar tidak error jika blade memanggil $orders
+                'orders' => $allOrders, 
                 'title' => 'Status Pesanan Aktif'
             ]);
         }
 
         // 2. Logika untuk Halaman Riwayat (user.history)
-        // Memisahkan pesanan yang sudah selesai/batal untuk variabel di history.blade.php
         $completedOrders = $allOrders->whereIn('status', ['selesai', 'batal']);
         
         return view('user.history', [
-            'orders' => $allOrders,             // Semua data
-            'completedOrders' => $completedOrders, // Sesuai permintaan di file blade Anda
-            'activeOrders' => $allOrders,       // Backup agar tidak error
+            'orders' => $allOrders,
+            'completedOrders' => $completedOrders,
+            'activeOrders' => $allOrders,
             'title' => 'Riwayat Pesanan Anda'
         ]);
     }
@@ -85,17 +83,16 @@ class OrderController extends Controller
             ], 422);
         }
 
-        // 2. Logika Penentuan Path Gambar (Upload vs Katalog) - DIPERBAIKI UNTUK VERCEL
+        // 2. Logika Penentuan Path Gambar
         $path = null;
         if ($request->hasFile('design_file')) {
             try {
-                // Di Vercel, folder storage/public tidak bisa dibuat (Read-Only).
-                // Kita coba simpan, jika gagal karena permission, kita arahkan ke /tmp 
-                // atau beri nama path sementara agar Midtrans tetap jalan.
+                // Di Vercel, pastikan filesystem di config/filesystems.php tidak memaksa 'local' jika gagal
                 $path = $request->file('design_file')->store('designs', 'public');
             } catch (\Exception $e) {
-                Log::warning("Vercel Storage Error: " . $e->getMessage());
-                // Fallback: Gunakan nama file saja atau arahkan ke temp agar tidak crash
+                Log::warning("Storage Error (Vercel/Permission): " . $e->getMessage());
+                // Fallback: Tetap buat path string agar database tidak null, 
+                // meskipun file fisiknya mungkin tidak tersimpan di local Vercel (disarankan S3/Cloudinary)
                 $file = $request->file('design_file');
                 $path = 'designs/' . time() . '_' . $file->getClientOriginalName();
             }
@@ -109,7 +106,8 @@ class OrderController extends Controller
         Config::$isSanitized = config('services.midtrans.isSanitized');
         Config::$is3ds = config('services.midtrans.is3ds');
 
-        $temp_order_id = 'SABLON-TEMP-' . time() . '-' . Auth::id();
+        // Order ID unik untuk Midtrans
+        $temp_order_id = 'SABLON-' . time() . '-' . Auth::id();
 
         $params = [
             'transaction_details' => [
@@ -121,10 +119,10 @@ class OrderController extends Controller
                 'email' => Auth::user()->email,
             ],
             'item_details' => [[
-                'id' => substr($request->package_name, 0, 50),
+                'id' => substr($request->package_name, 0, 20),
                 'price' => (int) $request->total_price,
                 'quantity' => 1,
-                'name' => "Pesanan: " . substr($request->package_name, 0, 40),
+                'name' => "Pesanan " . ucfirst($request->package_name),
             ]]
         ];
 
@@ -134,27 +132,31 @@ class OrderController extends Controller
             return response()->json([
                 'status' => 'success',
                 'snap_token' => $snapToken,
-                'design_file' => $path, 
+                'design_file' => $path, // Dikirim balik ke JS untuk disimpan di finalize
                 'message' => 'Token berhasil dibuat'
             ]);
 
         } catch (\Exception $e) {
+            Log::error("Midtrans Snap Error: " . $e->getMessage());
             return response()->json([
                 'status' => 'error',
-                'message' => 'Midtrans Error: ' . $e->getMessage()
+                'message' => 'Gagal terhubung ke Midtrans: ' . $e->getMessage()
             ], 500);
         }
     }
 
     /**
-     * Tahap 2: Simpan ke Database (Hanya jika pembayaran diproses)
+     * Tahap 2: Simpan ke Database
      */
     public function finalize(Request $request)
     {
         try {
+            // Gunakan path file yang dikirim dari tahap store
+            $designPath = $request->design_file_path ?? $request->design_file;
+
             $order = Order::create([
                 'user_id'       => Auth::id(),
-                'design_file'   => $request->design_file_path ?? $request->design_file, 
+                'design_file'   => $designPath, 
                 'size'          => $request->size,
                 'quantity'      => $request->quantity,
                 'package_name'  => $request->package_name, 
@@ -172,15 +174,16 @@ class OrderController extends Controller
                 'redirect_url' => route('user.status')
             ]);
         } catch (\Exception $e) {
+            Log::error("Finalize Order Error: " . $e->getMessage());
             return response()->json([
                 'status' => 'error', 
-                'message' => 'Gagal menyimpan pesanan: ' . $e->getMessage()
+                'message' => 'Gagal menyimpan ke database: ' . $e->getMessage()
             ], 500);
         }
     }
 
     /**
-     * Membatalkan pesanan (Hapus/Destroy).
+     * Membatalkan pesanan (Hapus).
      */
     public function destroy($id)
     {
@@ -193,7 +196,7 @@ class OrderController extends Controller
                         Storage::disk('public')->delete($order->design_file);
                     }
                 } catch (\Exception $e) {
-                    Log::error("Gagal hapus file di Vercel: " . $e->getMessage());
+                    Log::error("Gagal hapus file: " . $e->getMessage());
                 }
             }
             
