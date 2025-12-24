@@ -17,17 +17,16 @@ class RoleManager
 
         $userRole = Auth::user()->role;
 
-        // Jika role tidak sesuai, arahkan ke dashboard masing-masing HANYA jika berbeda rute
+        // CEK: Jika role user TIDAK SESUAI dengan syarat route
         if ($userRole !== $role) {
-            if ($userRole === 'admin' && $request->routeIs('dashboard')) {
+            // Jika dia admin tapi buka rute 'user', lempar ke admin dashboard
+            if ($userRole === 'admin') {
                 return redirect()->route('admin.dashboard');
             }
-            if ($userRole === 'user' && $request->is('admin/*')) {
+            // Jika dia user tapi buka rute 'admin', lempar ke dashboard user
+            if ($userRole === 'user') {
                 return redirect()->route('dashboard');
             }
-            
-            // Jika akses benar-benar terlarang
-            abort(403, 'Unauthorized action.');
         }
 
         return $next($request);

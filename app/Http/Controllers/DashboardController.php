@@ -9,26 +9,17 @@ class DashboardController extends Controller
 {
     public function index()
     {
-        // 1. Pastikan user login
-        if (!Auth::check()) {
-            return redirect()->route('login');
-        }
-
-        $user = Auth::user();
-
-        // 2. Cek role DENGAN AMAN (tidak bikin 500)
-        if (isset($user->role) && $user->role === 'admin') {
+        // 1. Cek Role Admin
+        if (Auth::user()->role === 'admin') {
             return redirect()->route('admin.dashboard');
         }
 
-        // 3. Ambil pesanan user
-        $orders = Order::where('user_id', $user->id)
-            ->latest()
-            ->get();
+        // 2. Jika User biasa, ambil data pesanan miliknya
+        $orders = Order::where('user_id', Auth::id())
+                       ->latest()
+                       ->get();
 
-        // 4. Pastikan view lowercase
-        return view('user.dashboard', [
-            'orders' => $orders
-        ]);
+        // 3. Pastikan file ini ada di resources/views/dashboard.blade.php
+        return view('user.dashboard', compact('orders')); 
     }
 }
