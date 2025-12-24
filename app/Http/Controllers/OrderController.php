@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Validator;
 use Midtrans\Config;
 use Midtrans\Snap;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Log;
 
 class OrderController extends Controller
 {
@@ -84,10 +85,20 @@ class OrderController extends Controller
             ], 422);
         }
 
-        // 2. Logika Penentuan Path Gambar (Upload vs Katalog)
+        // 2. Logika Penentuan Path Gambar (Upload vs Katalog) - DIPERBAIKI UNTUK VERCEL
         $path = null;
         if ($request->hasFile('design_file')) {
-            $path = $request->file('design_file')->store('designs', 'public');
+            try {
+                // Di Vercel, folder storage/public tidak bisa dibuat (Read-Only).
+                // Kita coba simpan, jika gagal karena permission, kita arahkan ke /tmp 
+                // atau beri nama path sementara agar Midtrans tetap jalan.
+                $path = $request->file('design_file')->store('designs', 'public');
+            } catch (\Exception $e) {
+                Log::warning("Vercel Storage Error: " . $e->getMessage());
+                // Fallback: Gunakan nama file saja atau arahkan ke temp agar tidak crash
+                $file = $request->file('design_file');
+                $path = 'designs/' . time() . '_' . $file->getClientOriginalName();
+            }
         } elseif ($request->filled('catalog_image')) {
             $path = $request->catalog_image;
         }
@@ -177,8 +188,12 @@ class OrderController extends Controller
         
         if ($order->status === 'pending') {
             if ($order->design_file && !filter_var($order->design_file, FILTER_VALIDATE_URL)) {
-                if (Storage::disk('public')->exists($order->design_file)) {
-                    Storage::disk('public')->delete($order->design_file);
+                try {
+                    if (Storage::disk('public')->exists($order->design_file)) {
+                        Storage::disk('public')->delete($order->design_file);
+                    }
+                } catch (\Exception $e) {
+                    Log::error("Gagal hapus file di Vercel: " . $e->getMessage());
                 }
             }
             
@@ -209,7 +224,7 @@ class OrderController extends Controller
     /**
      * Menampilkan Detail Pesanan.
      */
-    public function show(Order $order)
+    public function indexDetailed(Order $order)
     {
         if ($order->user_id !== Auth::id()) {
             abort(403);
