@@ -41,16 +41,19 @@ Route::middleware('auth')->group(function () {
         
         /**
          * FITUR: PEMESANAN (Pusat Kendali di OrderController)
-         * Sinkronisasi rute agar tidak error di welcome.blade.php
+         * Sinkronisasi rute agar tidak error di welcome.blade.php dan dashboard.blade.php
          */
-        // Rute Utama
+        // Rute Utama Form Pemesanan
         Route::get('/order/create', [OrderController::class, 'create'])->name('order.create');
         
-        // FIX: Tambahkan alias 'orders.create' agar link di welcome.blade.php baris 386 tidak error
+        // ALIAS: Agar link di welcome.blade.php (baris 386) tidak error
         Route::get('/order/make', [OrderController::class, 'create'])->name('orders.create');
         
-        // Route Utama Store (Gunakan nama 'orders.store' agar sinkron dengan form modal dashboard)
+        // Rute Simpan Pesanan (DENGAN ALIAS UNTUK DASHBOARD)
         Route::post('/order/store', [OrderController::class, 'store'])->name('orders.store');
+        
+        // FIX: Tambahkan alias 'order.store' tanpa huruf 's' agar form di dashboard.blade.php (baris 69) tidak error
+        Route::post('/order/save-request', [OrderController::class, 'store'])->name('order.store');
         
         // Route Finalize (Wajib untuk Midtrans Snap)
         Route::post('/order/finalize', [OrderController::class, 'finalize'])->name('order.finalize');
