@@ -1,5 +1,5 @@
 <x-app-layout>
-   <div x-data="{ 
+    <div x-data="{ 
         // --- State Galeri/Modal ---
         openModal: false, 
         currentSlides: [], 
@@ -121,7 +121,8 @@
                 this.loading = false;
             }
         }
-    }"><div class="relative bg-black h-[550px] flex items-center overflow-hidden">
+    }">
+        <div class="relative bg-black h-[550px] flex items-center overflow-hidden">
             <div class="absolute inset-0 z-0">
                 <img src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80"
                     class="w-full h-full object-cover opacity-40 scale-105 animate-pulse-slow">
@@ -645,101 +646,103 @@
                         </div>
                     </form>
                 </div>
-</div> <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script type="text/javascript" src="https://app.sandbox.midtrans.com/snap/snap.js" data-client-key="{{ config('services.midtrans.client_key') }}"></script>
-                <script type="text/javascript">
-                    document.addEventListener('DOMContentLoaded', function () {
-                        const payButton = document.getElementById('pay-button');
+            </div>
+            <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+            <script type="text/javascript" src="https://app.sandbox.midtrans.com/snap/snap.js"
+                data-client-key="{{ config('services.midtrans.client_key') }}"></script>
+            <script type="text/javascript">
+                document.addEventListener('DOMContentLoaded', function () {
+                    const payButton = document.getElementById('pay-button');
 
-                        if (payButton) {
-                            payButton.addEventListener('click', async function (e) {
-                                e.preventDefault();
+                    if (payButton) {
+                        payButton.addEventListener('click', async function (e) {
+                            e.preventDefault();
 
-                                // Ambil data Alpine
-                                const alpineData = Alpine.$data(payButton.closest('[x-data]'));
+                            // Ambil data Alpine
+                            const alpineData = Alpine.$data(payButton.closest('[x-data]'));
 
-                                // Loading State
-                                payButton.disabled = true;
-                                payButton.innerText = "MENGHUBUNGKAN...";
+                            // Loading State
+                            payButton.disabled = true;
+                            payButton.innerText = "MENGHUBUNGKAN...";
 
-                                const form = document.getElementById('order-form');
-                                const formData = new FormData(form);
+                            const form = document.getElementById('order-form');
+                            const formData = new FormData(form);
 
-                                // Tambahkan data dari Alpine secara manual untuk akurasi
-                                formData.set('package_name', alpineData.activeTitle);
-                                formData.set('quantity', alpineData.qty);
-                                formData.set('total_price', alpineData.qty * alpineData.activePrice);
+                            // Tambahkan data dari Alpine secara manual untuk akurasi
+                            formData.set('package_name', alpineData.activeTitle);
+                            formData.set('quantity', alpineData.qty);
+                            formData.set('total_price', alpineData.qty * alpineData.activePrice);
 
-                                // Jika tidak ada file yang diupload, kirimkan image katalog yang aktif
-                                const fileInput = form.querySelector('input[name="design_file"]');
-                                if (!fileInput.files[0]) {
-                                    formData.append('catalog_image', alpineData.currentSlides[alpineData.currentIndex]);
-                                }
+                            // Jika tidak ada file yang diupload, kirimkan image katalog yang aktif
+                            const fileInput = form.querySelector('input[name="design_file"]');
+                            if (!fileInput.files[0]) {
+                                formData.append('catalog_image', alpineData.currentSlides[alpineData.currentIndex]);
+                            }
 
-                                try {
-                                    const response = await fetch("{{ route('order.store') }}", {
-                                        method: 'POST',
-                                        body: formData,
-                                        headers: {
-                                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                                            'Accept': 'application/json'
-                                        }
-                                    });
-
-                                    const result = await response.json();
-
-                                    if (response.ok && result.snap_token) {
-                                        // PANGGIL MIDTRANS POPUP
-                                        window.snap.pay(result.snap_token, {
-                                            onSuccess: function (res) { finalizeOrder(result, formData); },
-                                            onPending: function (res) { finalizeOrder(result, formData); },
-                                            onError: function (res) {
-                                                alert("Pembayaran gagal!");
-                                                resetBtn(payButton);
-                                            },
-                                            onClose: function () { resetBtn(payButton); }
-                                        });
-                                    } else {
-                                        alert('Gagal: ' + (result.message || "Terjadi kesalahan data"));
-                                        resetBtn(payButton);
+                            try {
+                                const response = await fetch("{{ route('order.store') }}", {
+                                    method: 'POST',
+                                    body: formData,
+                                    headers: {
+                                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                        'Accept': 'application/json'
                                     }
-                                } catch (error) {
-                                    console.error('Error:', error);
-                                    alert('Koneksi terputus atau server error.');
+                                });
+
+                                const result = await response.json();
+
+                                if (response.ok && result.snap_token) {
+                                    // PANGGIL MIDTRANS POPUP
+                                    window.snap.pay(result.snap_token, {
+                                        onSuccess: function (res) { finalizeOrder(result, formData); },
+                                        onPending: function (res) { finalizeOrder(result, formData); },
+                                        onError: function (res) {
+                                            alert("Pembayaran gagal!");
+                                            resetBtn(payButton);
+                                        },
+                                        onClose: function () { resetBtn(payButton); }
+                                    });
+                                } else {
+                                    alert('Gagal: ' + (result.message || "Terjadi kesalahan data"));
                                     resetBtn(payButton);
                                 }
-                            });
-                        }
-                    });
-
-                    function resetBtn(btn) {
-                        btn.disabled = false;
-                        btn.innerText = "KONFIRMASI & BAYAR SEKARANG";
-                    }
-
-                    async function finalizeOrder(serverResult, originalData) {
-                        originalData.append('snap_token', serverResult.snap_token);
-                        try {
-                            const response = await fetch("{{ route('order.finalize') }}", {
-                                method: 'POST',
-                                body: originalData,
-                                headers: {
-                                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                                    'Accept': 'application/json'
-                                }
-                            });
-                            const finalRes = await response.json();
-                            if (finalRes.status === 'success') {
-                                window.location.href = finalRes.redirect_url;
+                            } catch (error) {
+                                console.error('Error:', error);
+                                alert('Koneksi terputus atau server error.');
+                                resetBtn(payButton);
                             }
-                        } catch (e) {
-                            alert("Sistem gagal mencatat pesanan.");
-                        }
+                        });
                     }
-                </script>
-            </div>
+                });
+
+                function resetBtn(btn) {
+                    btn.disabled = false;
+                    btn.innerText = "KONFIRMASI & BAYAR SEKARANG";
+                }
+
+                async function finalizeOrder(serverResult, originalData) {
+                    originalData.append('snap_token', serverResult.snap_token);
+                    try {
+                        const response = await fetch("{{ route('order.finalize') }}", {
+                            method: 'POST',
+                            body: originalData,
+                            headers: {
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                'Accept': 'application/json'
+                            }
+                        });
+                        const finalRes = await response.json();
+                        if (finalRes.status === 'success') {
+                            window.location.href = finalRes.redirect_url;
+                        }
+                    } catch (e) {
+                        alert("Sistem gagal mencatat pesanan.");
+                    }
+                }
+            </script>
         </div>
-        </form>
+    </div>
+    </form>
     </div>
 
     </div>
