@@ -1,9 +1,9 @@
 <?php
 
-// 1. Definisikan folder sementara yang bisa ditulisi di Vercel
+// 1. Definisikan jalur storage di folder /tmp (satu-satunya tempat yang bisa ditulisi)
 $storagePath = '/tmp/storage';
 
-// 2. Buat struktur folder di /tmp setiap kali ada request (jika belum ada)
+// 2. Buat folder yang dibutuhkan secara paksa dengan izin 0755
 $dirs = [
     $storagePath . '/framework/views',
     $storagePath . '/framework/cache',
@@ -14,21 +14,21 @@ $dirs = [
 foreach ($dirs as $dir) {
     if (!is_dir($dir)) {
         mkdir($dir, 0755, true);
+        chmod($dir, 0755);
     }
 }
 
-// 3. Load aplikasi
+// 3. Load Autoloader dan Inisialisasi Aplikasi
 require __DIR__ . '/../vendor/autoload.php';
 $app = require_once __DIR__ . '/../bootstrap/app.php';
 
-// 4. Pengaturan krusial agar Laravel tidak mencari class [view] di tempat yang salah
+// 4. Paksa Laravel menggunakan jalur baru ini (KRUSIAL)
 $app->useStoragePath($storagePath);
-$app->bind('path.public', function() { return __DIR__ . '/../public'; });
 
-// Paksa config agar mengarah ke folder yang bisa ditulisi
+// Konfigurasi tambahan agar engine 'view' tidak error
 config(['view.compiled' => $storagePath . '/framework/views']);
 config(['cache.stores.file.path' => $storagePath . '/framework/cache']);
-config(['session.files' => $storagePath . '/framework/sessions']);
+config(['session.driver' => 'cookie']);
 
 // 5. Jalankan Kernel
 $kernel = $app->make(Illuminate\Contracts\Http\Kernel::class);
