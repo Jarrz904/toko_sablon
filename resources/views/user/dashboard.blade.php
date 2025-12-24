@@ -529,168 +529,144 @@
                     </div>
                 </div>
 
-                <div x-show="openModal" x-cloak x-transition:enter="transition ease-out duration-300"
-                    x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
-                    x-transition:leave="transition ease-in duration-200"
-                    x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
-                    class="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black"
-                    @keydown.escape.window="openModal = false">
+<div x-show="openModal" x-cloak x-transition:enter="transition ease-out duration-300"
+    x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+    x-transition:leave="transition ease-in duration-200" x-transition:leave-start="opacity-100 scale-100"
+    x-transition:leave-end="opacity-0 scale-95"
+    class="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black"
+    @keydown.escape.window="openModal = false">
 
-                    <div @click="openModal = false" class="absolute inset-0 bg-black/90 backdrop-blur-sm"></div>
+    <div @click="openModal = false" class="absolute inset-0 bg-black/90 backdrop-blur-sm"></div>
 
-                    <form action="{{ route('orders.store') }}" method="POST" enctype="multipart/form-data"
-                        class="relative w-full max-w-7xl h-[90vh] bg-zinc-950 rounded-[2.5rem] overflow-hidden shadow-[0_0_80px_rgba(0,0,0,1)] border border-white/10 flex flex-col md:flex-row">
-                        @csrf
+    <form action="{{ route('orders.store') }}" id="order-form" method="POST" enctype="multipart/form-data"
+        class="relative w-full max-w-7xl h-[90vh] bg-zinc-950 rounded-[2.5rem] overflow-hidden shadow-[0_0_80px_rgba(0,0,0,1)] border border-white/10 flex flex-col md:flex-row">
+        @csrf
 
-                        <input type="hidden" name="package_name" x-bind:value="activeTitle">
-                        <input type="hidden" name="total_price" x-bind:value="qty * activePrice">
-                        <input type="hidden" name="source" value="catalog">
+        <input type="hidden" name="package_name" x-bind:value="activeTitle">
+        <input type="hidden" name="total_price" x-bind:value="qty * activePrice">
+        <input type="hidden" name="source" value="catalog">
+        <input type="hidden" name="catalog_image" x-bind:value="currentSlides[currentIndex]">
 
-                        <input type="hidden" name="catalog_image" x-bind:value="currentSlides[0]">
+        <button type="button" @click="openModal = false"
+            class="absolute top-6 right-6 z-[130] w-12 h-12 rounded-full bg-white text-black flex items-center justify-center hover:bg-red-600 hover:text-white transition-all duration-300 shadow-2xl group">
+            <svg class="w-6 h-6 group-hover:rotate-90 transition-transform duration-300" fill="none"
+                stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M6 18L18 6M6 6l12 12" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+        </button>
 
-                        <button type="button" @click="openModal = false"
-                            class="absolute top-6 right-6 z-[130] w-12 h-12 rounded-full bg-white text-black flex items-center justify-center hover:bg-red-600 hover:text-white transition-all duration-300 shadow-2xl group">
-                            <svg class="w-6 h-6 group-hover:rotate-90 transition-transform duration-300" fill="none"
-                                stroke="currentColor" viewBox="0 0 24 24">
-                                <path d="M6 18L18 6M6 6l12 12" stroke-width="3" stroke-linecap="round"
-                                    stroke-linejoin="round" />
-                            </svg>
-                        </button>
+        <div class="relative flex-[4] bg-black overflow-hidden flex items-center justify-center">
+            <template x-for="(slide, index) in currentSlides" :key="index">
+                <div x-show="currentIndex === index" x-transition:enter="transition duration-500 ease-in-out"
+                    x-transition:enter-start="opacity-0 scale-105" x-transition:enter-end="opacity-100 scale-100"
+                    class="absolute inset-0 flex items-center justify-center p-4 sm:p-12">
+                    <img :src="slide" class="max-w-full max-h-full object-contain select-none shadow-2xl rounded-2xl">
+                </div>
+            </template>
 
-                        <div class="relative flex-[4] bg-black overflow-hidden flex items-center justify-center">
-                            <template x-for="(slide, index) in currentSlides" :key="index">
-                                <div x-show="currentIndex === index"
-                                    x-transition:enter="transition duration-500 ease-in-out"
-                                    x-transition:enter-start="opacity-0 scale-105"
-                                    x-transition:enter-end="opacity-100 scale-100"
-                                    class="absolute inset-0 flex items-center justify-center p-4 sm:p-12">
-                                    <img :src="slide"
-                                        class="max-w-full max-h-full object-contain select-none shadow-2xl rounded-2xl">
-                                </div>
-                            </template>
+            <div class="absolute inset-x-8 top-1/2 -translate-y-1/2 flex justify-between pointer-events-none z-10">
+                <button type="button" @click="prev()"
+                    class="pointer-events-auto w-14 h-14 rounded-full bg-white/10 hover:bg-indigo-600 text-white backdrop-blur-md transition-all border border-white/10 flex items-center justify-center">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15 19l-7-7 7-7" />
+                    </svg>
+                </button>
+                <button type="button" @click="next()"
+                    class="pointer-events-auto w-14 h-14 rounded-full bg-white/10 hover:bg-indigo-600 text-white backdrop-blur-md transition-all border border-white/10 flex items-center justify-center">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7" />
+                    </svg>
+                </button>
+            </div>
+        </div>
 
-                            <div
-                                class="absolute inset-x-8 top-1/2 -translate-y-1/2 flex justify-between pointer-events-none z-10">
-                                <button type="button" @click="prev()"
-                                    class="pointer-events-auto w-14 h-14 rounded-full bg-white/10 hover:bg-indigo-600 text-white backdrop-blur-md transition-all border border-white/10 flex items-center justify-center">
-                                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
-                                            d="M15 19l-7-7 7-7" />
-                                    </svg>
-                                </button>
-                                <button type="button" @click="next()"
-                                    class="pointer-events-auto w-14 h-14 rounded-full bg-white/10 hover:bg-indigo-600 text-white backdrop-blur-md transition-all border border-white/10 flex items-center justify-center">
-                                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
-                                            d="M9 5l7 7-7 7" />
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
+        <div class="w-full md:w-[450px] p-10 flex flex-col justify-between border-l border-white/5 bg-zinc-950 text-white z-20 overflow-y-auto">
+            <div class="space-y-6">
+                <div>
+                    <span class="text-indigo-500 text-[10px] font-black uppercase tracking-[0.4em]">Detail Pilihan</span>
+                    <h3 class="text-4xl font-black italic uppercase text-white leading-tight mt-2" x-text="activeTitle"></h3>
+                </div>
 
-                        <div
-                            class="w-full md:w-[450px] p-10 flex flex-col justify-between border-l border-white/5 bg-zinc-950 text-white z-20 overflow-y-auto">
-                            <div class="space-y-6">
-                                <div>
-                                    <span
-                                        class="text-indigo-500 text-[10px] font-black uppercase tracking-[0.4em]">Detail
-                                        Pilihan</span>
-                                    <h3 class="text-4xl font-black italic uppercase text-white leading-tight mt-2"
-                                        x-text="activeTitle"></h3>
-                                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                        <label class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Jumlah (Qty)</label>
+                        <input type="number" name="quantity" x-model.number="qty" min="1" required
+                            class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none text-white">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Ukuran</label>
+                        <select name="size" required
+                            class="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none text-white appearance-none">
+                            <option value="S">S</option>
+                            <option value="M" selected>M</option>
+                            <option value="L">L</option>
+                            <option value="XL">XL</option>
+                            <option value="XXL">XXL</option>
+                        </select>
+                    </div>
+                </div>
 
-                                <div class="grid grid-cols-2 gap-4">
-                                    <div class="space-y-2">
-                                        <label
-                                            class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Jumlah
-                                            (Qty)</label>
-                                        <input type="number" name="quantity" x-model.number="qty" min="1" required
-                                            class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none text-white">
-                                    </div>
-                                    <div class="space-y-2">
-                                        <label
-                                            class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Ukuran</label>
-                                        <select name="size" required
-                                            class="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none text-white appearance-none">
-                                            <option value="S">S</option>
-                                            <option value="M" selected>M</option>
-                                            <option value="L">L</option>
-                                            <option value="XL">XL</option>
-                                            <option value="XXL">XXL</option>
-                                        </select>
-                                    </div>
-                                </div>
+                <div class="space-y-2">
+                    <label class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Ganti Desain (Opsional)</label>
+                    <input type="file" name="design_file"
+                        class="w-full text-xs text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 hover:file:bg-indigo-600 transition-all">
+                    <p class="text-[9px] text-zinc-500 italic">*Biarkan kosong jika ingin desain katalog asli</p>
+                </div>
 
-                                <div class="space-y-2">
-                                    <label class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Ganti
-                                        Desain (Opsional)</label>
-                                    <input type="file" name="design_file"
-                                        class="w-full text-xs text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 hover:file:bg-indigo-600 transition-all">
-                                    <p class="text-[9px] text-zinc-500 italic">*Biarkan kosong jika ingin desain katalog
-                                        asli</p>
-                                </div>
+                <div class="space-y-2">
+                    <label class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Catatan Tambahan</label>
+                    <textarea name="notes" rows="2"
+                        class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none resize-none text-white"
+                        placeholder="Contoh: Kaos Putih, Desain di depan.."></textarea>
+                </div>
+            </div>
 
-                                <div class="space-y-2">
-                                    <label class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Catatan
-                                        Tambahan</label>
-                                    <textarea name="notes" rows="2"
-                                        class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none resize-none text-white"
-                                        placeholder="Contoh: Kaos Putih, Desain di depan.."></textarea>
-                                </div>
-                            </div>
+            <div class="pt-8 mt-8 border-t border-white/10 space-y-6">
+                <div class="flex flex-col">
+                    <span class="text-zinc-500 text-[11px] font-black uppercase mb-1 tracking-wider">Total Harga</span>
+                    <span class="text-white font-black italic text-4xl tracking-tighter"
+                        x-text="'Rp ' + (qty * activePrice).toLocaleString('id-ID')"></span>
+                </div>
 
-                            <div class="pt-8 mt-8 border-t border-white/10 space-y-6">
-    <div class="flex flex-col">
-        <span class="text-zinc-500 text-[11px] font-black uppercase mb-1 tracking-wider">
-            Total Harga
-        </span>
-        <span id="display-total-price" class="text-white font-black italic text-4xl tracking-tighter"
-            x-text="'Rp ' + (qty * activePrice).toLocaleString('id-ID')">
-        </span>
-    </div>
+                <button type="button" id="pay-button"
+                    class="w-full bg-white text-black py-6 rounded-2xl font-black uppercase text-sm tracking-[0.2em] hover:bg-indigo-600 hover:text-white transition-all transform active:scale-95 shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed">
+                    Konfirmasi & Bayar Sekarang
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
 
-    <button type="button" id="pay-button"
-        class="w-full bg-white text-black py-6 rounded-2xl font-black uppercase text-sm tracking-[0.2em] hover:bg-indigo-600 hover:text-white transition-all transform active:scale-95 shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed">
-        Konfirmasi & Bayar Sekarang
-    </button>
-
-    <script type="text/javascript">
+<script type="text/javascript">
+    document.addEventListener('DOMContentLoaded', function() {
         const payButton = document.getElementById('pay-button');
 
         if (payButton) {
-            payButton.addEventListener('click', async function (e) {
+            payButton.addEventListener('click', async function(e) {
                 e.preventDefault();
 
-                // Ambil data langsung dari scope Alpine.js
-                // Kita gunakan Alpine.evaluate untuk mengambil data terbaru dari state
+                // Ambil data Alpine
                 const alpineData = Alpine.$data(payButton.closest('[x-data]'));
-
-                // Set loading state
+                
+                // Loading State
                 payButton.disabled = true;
                 payButton.innerText = "MENGHUBUNGKAN...";
 
-                const formData = new FormData();
+                const form = document.getElementById('order-form');
+                const formData = new FormData(form);
 
-                // 1. Ambil data dari state Alpine agar sinkron dengan UI
-                // Perbaikan: Mengambil activeTitle sebagai package_name agar lolos validasi 'required'
-                formData.append('package_name', alpineData.activeTitle || 'Satuan'); 
-                formData.append('quantity', alpineData.qty || 1);
-                formData.append('size', alpineData.selectedSize || 'M');
-                formData.append('notes', alpineData.notes || '');
-                formData.append('total_price', alpineData.qty * alpineData.activePrice);
-
-                // 2. Logika File Desain (Katalog vs Upload)
-                const fileInput = document.querySelector('input[name="design_file"]');
-                if (fileInput && fileInput.files[0]) {
-                    formData.append('design_file', fileInput.files[0]);
-                } else {
-                    // Ambil gambar dari slide yang sedang aktif di Alpine
-                    const currentImg = alpineData.currentSlides[alpineData.currentIndex];
-                    formData.append('catalog_image', currentImg);
+                // Tambahkan data dari Alpine secara manual untuk akurasi
+                formData.set('package_name', alpineData.activeTitle);
+                formData.set('quantity', alpineData.qty);
+                formData.set('total_price', alpineData.qty * alpineData.activePrice);
+                
+                // Jika tidak ada file yang diupload, kirimkan image katalog yang aktif
+                const fileInput = form.querySelector('input[name="design_file"]');
+                if (!fileInput.files[0]) {
+                    formData.append('catalog_image', alpineData.currentSlides[alpineData.currentIndex]);
                 }
 
                 try {
-                    // STEP 1: Request Snap Token ke Controller
                     const response = await fetch("{{ route('order.store') }}", {
                         method: 'POST',
                         body: formData,
@@ -703,66 +679,54 @@
                     const result = await response.json();
 
                     if (response.ok && result.snap_token) {
-                        // STEP 2: Panggil Midtrans Snap
+                        // PANGGIL MIDTRANS POPUP
                         window.snap.pay(result.snap_token, {
-                            onSuccess: function (res) {
-                                // Panggil fungsi finalize di Alpine jika ada, atau redirect
-                                finalizeOrder(result, formData);
+                            onSuccess: function(res) { finalizeOrder(result, formData); },
+                            onPending: function(res) { finalizeOrder(result, formData); },
+                            onError: function(res) { 
+                                alert("Pembayaran gagal!"); 
+                                resetBtn(payButton); 
                             },
-                            onPending: function (res) {
-                                finalizeOrder(result, formData);
-                            },
-                            onError: function (res) {
-                                alert("Pembayaran gagal!");
-                                resetBtn(payButton);
-                            },
-                            onClose: function () {
-                                resetBtn(payButton);
-                            }
+                            onClose: function() { resetBtn(payButton); }
                         });
                     } else {
-                        // Menangani error validasi Laravel
-                        const errorMsg = result.message || "Data tidak valid";
-                        alert('Gagal: ' + errorMsg);
+                        alert('Gagal: ' + (result.message || "Terjadi kesalahan data"));
                         resetBtn(payButton);
                     }
                 } catch (error) {
                     console.error('Error:', error);
-                    alert('Terjadi kesalahan koneksi sistem.');
+                    alert('Koneksi terputus atau server error.');
                     resetBtn(payButton);
                 }
             });
         }
+    });
 
-        // Fungsi Helper untuk mereset tombol
-        function resetBtn(btn) {
-            btn.disabled = false;
-            btn.innerText = "KONFIRMASI & BAYAR SEKARANG";
-        }
+    function resetBtn(btn) {
+        btn.disabled = false;
+        btn.innerText = "KONFIRMASI & BAYAR SEKARANG";
+    }
 
-        // Fungsi untuk mencatat pesanan ke DB setelah Midtrans sukses/pending
-        async function finalizeOrder(serverResult, originalData) {
-            originalData.append('snap_token', serverResult.snap_token);
-            originalData.append('design_file', serverResult.design_file);
-
-            try {
-                const response = await fetch("{{ route('order.finalize') }}", {
-                    method: 'POST',
-                    body: originalData,
-                    headers: {
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                        'Accept': 'application/json'
-                    }
-                });
-                const finalRes = await response.json();
-                if (finalRes.status === 'success') {
-                    window.location.href = finalRes.redirect_url;
+    async function finalizeOrder(serverResult, originalData) {
+        originalData.append('snap_token', serverResult.snap_token);
+        try {
+            const response = await fetch("{{ route('order.finalize') }}", {
+                method: 'POST',
+                body: originalData,
+                headers: {
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'Accept': 'application/json'
                 }
-            } catch (e) {
-                alert("Gagal mencatat pesanan ke database.");
+            });
+            const finalRes = await response.json();
+            if (finalRes.status === 'success') {
+                window.location.href = finalRes.redirect_url;
             }
+        } catch (e) {
+            alert("Sistem gagal mencatat pesanan.");
         }
-    </script>
+    }
+</script>
 </div>
                         </div>
                     </form>
