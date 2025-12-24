@@ -41,19 +41,23 @@ Route::middleware('auth')->group(function () {
         
         /**
          * FITUR: PEMESANAN (Pusat Kendali di OrderController)
-         * Digunakan baik dari halaman Paket maupun Modal Dashboard
+         * Sinkronisasi rute agar tidak error di welcome.blade.php
          */
+        // Rute Utama
         Route::get('/order/create', [OrderController::class, 'create'])->name('order.create');
         
-        // Route Utama Store (Gunakan nama 'orders.store' agar sinkron dengan form)
+        // FIX: Tambahkan alias 'orders.create' agar link di welcome.blade.php baris 386 tidak error
+        Route::get('/order/make', [OrderController::class, 'create'])->name('orders.create');
+        
+        // Route Utama Store (Gunakan nama 'orders.store' agar sinkron dengan form modal dashboard)
         Route::post('/order/store', [OrderController::class, 'store'])->name('orders.store');
         
-        // Route Finalize (Wajib untuk Midtrans)
+        // Route Finalize (Wajib untuk Midtrans Snap)
         Route::post('/order/finalize', [OrderController::class, 'finalize'])->name('order.finalize');
         
         /**
          * FITUR BACKUP: PEMESANAN SATUAN (UserController)
-         * Tetap dipertahankan agar codingan lama tidak rusak
+         * Nama rute dibedakan agar tidak konflik dengan OrderController
          */
         Route::get('/order/new', [UserController::class, 'create'])->name('orders.new'); 
         Route::post('/order/save', [UserController::class, 'store'])->name('orders.save'); 
@@ -67,7 +71,7 @@ Route::middleware('auth')->group(function () {
         // Menampilkan riwayat pesanan
         Route::get('/riwayat-pesanan', [OrderController::class, 'index'])->name('user.history');
         
-        // Route Detail Pesanan (Diperbaiki mengarah ke indexDetailed agar sesuai Controller Anda)
+        // Route Detail Pesanan
         Route::get('/order-detail/{order}', [OrderController::class, 'indexDetailed'])->name('order.show');
 
         /**
@@ -82,7 +86,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/dashboard', [AdminOrderController::class, 'index'])->name('admin.dashboard');
         Route::get('/users', [AdminOrderController::class, 'userIndex'])->name('admin.users');
         
-        // Proses Admin
+        // Proses Admin (Store, Update, Delete)
         Route::post('/order/store', [AdminOrderController::class, 'store'])->name('admin.order.store');
         Route::patch('/order/{order}/{status}', [AdminOrderController::class, 'updateStatus'])->name('admin.order.update');
         Route::delete('/order/{order}', [AdminOrderController::class, 'destroy'])->name('admin.order.destroy');
