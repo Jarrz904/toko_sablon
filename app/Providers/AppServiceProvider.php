@@ -11,7 +11,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Bind vendor TrimStrings to our App TrimStrings implementation
+        // so the framework will resolve \Illuminate\Foundation\Http\Middleware\TrimStrings
+        // to \App\Http\Middleware\TrimStrings (defensive trim).
+        $this->app->bind(
+            \Illuminate\Foundation\Http\Middleware\TrimStrings::class,
+            \App\Http\Middleware\TrimStrings::class
+        );
     }
 
     /**
