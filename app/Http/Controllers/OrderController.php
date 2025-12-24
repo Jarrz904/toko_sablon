@@ -56,7 +56,8 @@ class OrderController extends Controller
     }
 
     /**
-     * Tahap 1: Validasi dan Ambil Snap Token (BELUM SIMPAN KE DB)
+     * Tahap 1: Validasi dan Ambil Snap Token
+     * Perbaikan: Memastikan konfigurasi Midtrans benar dan mengirim data lengkap untuk popup.
      */
     public function store(Request $request)
     {
@@ -87,12 +88,9 @@ class OrderController extends Controller
         $path = null;
         if ($request->hasFile('design_file')) {
             try {
-                // Di Vercel, pastikan filesystem di config/filesystems.php tidak memaksa 'local' jika gagal
                 $path = $request->file('design_file')->store('designs', 'public');
             } catch (\Exception $e) {
-                Log::warning("Storage Error (Vercel/Permission): " . $e->getMessage());
-                // Fallback: Tetap buat path string agar database tidak null, 
-                // meskipun file fisiknya mungkin tidak tersimpan di local Vercel (disarankan S3/Cloudinary)
+                Log::warning("Storage Error: " . $e->getMessage());
                 $file = $request->file('design_file');
                 $path = 'designs/' . time() . '_' . $file->getClientOriginalName();
             }
@@ -100,11 +98,11 @@ class OrderController extends Controller
             $path = $request->catalog_image;
         }
 
-        // 3. Konfigurasi Midtrans
-        Config::$serverKey = config('services.midtrans.serverKey');
-        Config::$isProduction = config('services.midtrans.isProduction');
-        Config::$isSanitized = config('services.midtrans.isSanitized');
-        Config::$is3ds = config('services.midtrans.is3ds');
+        // 3. Konfigurasi Midtrans (Menggunakan Fallback config() agar lebih aman)
+        Config::$serverKey = config('services.midtrans.serverKey') ?? env('MIDTRANS_SERVER_KEY');
+        Config::$isProduction = config('services.midtrans.isProduction') ?? env('MIDTRANS_IS_PRODUCTION', false);
+        Config::$isSanitized = config('services.midtrans.isSanitized') ?? true;
+        Config::$is3ds = config('services.midtrans.is3ds') ?? true;
 
         // Order ID unik untuk Midtrans
         $temp_order_id = 'SABLON-' . time() . '-' . Auth::id();
@@ -119,7 +117,7 @@ class OrderController extends Controller
                 'email' => Auth::user()->email,
             ],
             'item_details' => [[
-                'id' => substr($request->package_name, 0, 20),
+                'id' => substr(str_replace(' ', '-', $request->package_name), 0, 20),
                 'price' => (int) $request->total_price,
                 'quantity' => 1,
                 'name' => "Pesanan " . ucfirst($request->package_name),
@@ -129,10 +127,12 @@ class OrderController extends Controller
         try {
             $snapToken = Snap::getSnapToken($params);
             
+            // Mengembalikan semua data yang dibutuhkan Frontend untuk tahap finalize
             return response()->json([
                 'status' => 'success',
                 'snap_token' => $snapToken,
-                'design_file' => $path, // Dikirim balik ke JS untuk disimpan di finalize
+                'design_file' => $path,
+                'temp_order_id' => $temp_order_id,
                 'message' => 'Token berhasil dibuat'
             ]);
 
@@ -140,18 +140,19 @@ class OrderController extends Controller
             Log::error("Midtrans Snap Error: " . $e->getMessage());
             return response()->json([
                 'status' => 'error',
-                'message' => 'Gagal terhubung ke Midtrans: ' . $e->getMessage()
+                'message' => 'Gagal terhubung ke Midtrans. Periksa koneksi atau Server Key.'
             ], 500);
         }
     }
 
     /**
      * Tahap 2: Simpan ke Database
+     * Dipanggil setelah Snap Token didapat atau setelah popup Midtrans muncul.
      */
     public function finalize(Request $request)
     {
         try {
-            // Gunakan path file yang dikirim dari tahap store
+            // Gunakan path file yang disimpan di tahap store
             $designPath = $request->design_file_path ?? $request->design_file;
 
             $order = Order::create([
