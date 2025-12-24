@@ -4,7 +4,7 @@ namespace App\Http\Middleware;
 
 use Illuminate\Foundation\Http\Middleware\TrimStrings as Middleware;
 use Closure;
-use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Log;
 
 class TrimStrings extends Middleware
 {
@@ -16,14 +16,15 @@ class TrimStrings extends Middleware
     protected $except = [
         'password',
         'password_confirmation',
-        // tambahkan field yang tidak ingin di-trim
     ];
 
     /**
-     * Handle an incoming request — hanya trim nilai yang bertipe string.
+     * Handle an incoming request.
      */
     public function handle($request, Closure $next)
     {
+        Log::debug('App\\Http\\Middleware\\TrimStrings: handle() called');
+
         $input = $request->all();
 
         array_walk_recursive($input, function (&$value) {
@@ -32,7 +33,6 @@ class TrimStrings extends Middleware
             }
         });
 
-        // Merge lebih aman agar file/file upload tetap berada di $request->files
         $request->merge($input);
 
         return $next($request);
