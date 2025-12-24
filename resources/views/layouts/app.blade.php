@@ -54,29 +54,39 @@
                 {{ $slot }}
             </main>
         </div>
-        <script src="{{ config('services.midtrans.snap_url') }}" data-client-key="{{ config('services.midtrans.clientKey') }}"></script>
-    <script type="text/javascript">
-        window.payMidtrans = function(snapToken) {
-            window.snap.pay(snapToken, {
-                onSuccess: function(result) {
-                    alert("Pembayaran berhasil!");
-                    window.location.href = "{{ route('user.status') }}";
-                },
-                onPending: function(result) {
-                    alert("Menunggu pembayaran Anda!");
-                    window.location.reload();
-                },
-                onError: function(result) {
-                    alert("Pembayaran gagal!");
-                    window.location.reload();
-                },
-                onClose: function() {
-                    alert('Anda menutup pop-up tanpa menyelesaikan pembayaran');
+
+        <script src="{{ config('services.midtrans.snap_url', 'https://app.sandbox.midtrans.com/snap/snap.js') }}" 
+                data-client-key="{{ config('services.midtrans.clientKey') }}"></script>
+
+        <script type="text/javascript">
+            // Fungsi Global Midtrans (Tetap dipertahankan untuk backup)
+            window.payMidtrans = function(snapToken) {
+                if (!window.snap) {
+                    alert("Midtrans belum termuat sempurna. Silakan refresh.");
+                    return;
                 }
-            });
-        };
-    </script>
-</body>
-</html>
+                
+                window.snap.pay(snapToken, {
+                    onSuccess: function(result) {
+                        alert("Pembayaran berhasil!");
+                        window.location.href = "{{ route('user.status') }}";
+                    },
+                    onPending: function(result) {
+                        alert("Menunggu pembayaran Anda!");
+                        window.location.reload();
+                    },
+                    onError: function(result) {
+                        alert("Pembayaran gagal!");
+                        window.location.reload();
+                    },
+                    onClose: function() {
+                        alert('Anda menutup pop-up tanpa menyelesaikan pembayaran');
+                    }
+                });
+            };
+        </script>
+
+        {{-- Gunakan stack scripts agar script dari dashboard bisa disisipkan dengan benar --}}
+        @stack('scripts')
     </body>
 </html>

@@ -40,6 +40,13 @@
         // --- Alur Pembayaran Terintegrasi ---
         async checkout() {
             if (this.loading) return;
+            
+            // Validasi minimal quantity (Opsional: tambahkan sesuai logika paket Anda)
+            if (this.qty < 1) {
+                Swal.fire('Perhatian', 'Jumlah pesanan minimal 1 pcs', 'warning');
+                return;
+            }
+
             this.loading = true;
             
             let formData = new FormData();
@@ -54,6 +61,7 @@
             if (fileInput && fileInput.files[0]) {
                 formData.append('design_file', fileInput.files[0]);
             } else {
+                // Mengirimkan path gambar dari katalog jika tidak ada upload
                 formData.append('catalog_image', this.currentSlides[this.currentIndex]);
             }
 
@@ -67,9 +75,14 @@
                     }
                 });
 
+                if (!response.ok) {
+                    const errData = await response.json();
+                    throw new Error(errData.message || 'Server menyetujui permintaan tapi terjadi kesalahan.');
+                }
+
                 let result = await response.json();
 
-                if (response.ok && result.snap_token) {
+                if (result.snap_token) {
                     window.snap.pay(result.snap_token, {
                         onSuccess: (res) => { this.finalizeDatabase(result, formData); },
                         onPending: (res) => { this.finalizeDatabase(result, formData); },
@@ -82,11 +95,7 @@
                         }
                     });
                 } else {
-                    let errorMsg = result.message;
-                    if (result.errors) {
-                        errorMsg = Object.values(result.errors).flat().join(', ');
-                    }
-                    throw new Error(errorMsg || 'Gagal terhubung ke server pembayaran');
+                    throw new Error(result.message || 'Gagal terhubung ke server pembayaran');
                 }
             } catch (error) {
                 Swal.fire('Gagal Membuat Pesanan', error.message, 'error');
@@ -95,15 +104,27 @@
         },
 
         async finalizeDatabase(serverResult, originalData) {
-            originalData.append('snap_token', serverResult.snap_token);
+            // Kita buat FormData baru khusus untuk Finalize
+            // Vercel sering gagal jika mengirim ulang File Objek yang sama di request kedua
+            let finalData = new FormData();
+            
+            // Pindahkan data teks saja dari originalData
+            originalData.forEach((value, key) => {
+                if (!(value instanceof File)) {
+                    finalData.append(key, value);
+                }
+            });
+
+            // Tambahkan data dari server (Snap Token dan Path File yang sudah tersimpan di storage sementara)
+            finalData.append('snap_token', serverResult.snap_token);
             if (serverResult.design_file) {
-                originalData.append('design_file_path', serverResult.design_file);
+                finalData.append('design_file_path', serverResult.design_file);
             }
 
             try {
                 let response = await fetch('{{ route('order.finalize') }}', {
                     method: 'POST',
-                    body: originalData,
+                    body: finalData,
                     headers: {
                         'X-CSRF-TOKEN': '{{ csrf_token() }}',
                         'Accept': 'application/json'
@@ -117,7 +138,13 @@
                     throw new Error(finalRes.message);
                 }
             } catch (e) {
-                Swal.fire('Error', 'Pembayaran berhasil, tapi gagal mencatat pesanan.', 'warning');
+                console.error('Finalize Error:', e);
+                Swal.fire({
+                    title: 'Peringatan',
+                    text: 'Pembayaran berhasil, namun pencatatan otomatis gagal. Jangan tutup halaman ini dan hubungi admin.',
+                    icon: 'warning',
+                    confirmButtonText: 'OK'
+                });
                 this.loading = false;
             }
         }
@@ -520,136 +547,137 @@
                 </div>
 
                 <div x-show="openModal" x-cloak x-transition:enter="transition ease-out duration-300"
-                    x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
-                    x-transition:leave="transition ease-in duration-200"
-                    x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
-                    class="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black"
-                    @keydown.escape.window="openModal = false">
+    x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+    x-transition:leave="transition ease-in duration-200"
+    x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+    class="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black"
+    @keydown.escape.window="openModal = false">
 
-                    <div @click="openModal = false" class="absolute inset-0 bg-black/90 backdrop-blur-sm"></div>
+    <div @click="openModal = false" class="absolute inset-0 bg-black/90 backdrop-blur-sm"></div>
 
-                    <form action="{{ route('orders.store') }}" id="order-form" method="POST"
-                        enctype="multipart/form-data"
-                        class="relative w-full max-w-7xl h-[90vh] bg-zinc-950 rounded-[2.5rem] overflow-hidden shadow-[0_0_80px_rgba(0,0,0,1)] border border-white/10 flex flex-col md:flex-row">
-                        @csrf
+    {{-- Ganti action ke '#' karena kita handle via Fetch/AJAX di checkout() --}}
+    <form action="#" id="order-form" method="POST"
+        enctype="multipart/form-data"
+        class="relative w-full max-w-7xl h-[90vh] bg-zinc-950 rounded-[2.5rem] overflow-hidden shadow-[0_0_80px_rgba(0,0,0,1)] border border-white/10 flex flex-col md:flex-row">
+        @csrf
 
-                        <input type="hidden" name="package_name" x-bind:value="activeTitle">
-                        <input type="hidden" name="total_price" x-bind:value="qty * activePrice">
-                        <input type="hidden" name="source" value="catalog">
-                        <input type="hidden" name="catalog_image" x-bind:value="currentSlides[currentIndex]">
+        {{-- Hidden inputs untuk data tambahan --}}
+        <input type="hidden" name="package_name" x-bind:value="activeTitle">
+        <input type="hidden" name="total_price" x-bind:value="totalPrice">
+        <input type="hidden" name="source" value="catalog">
 
-                        <button type="button" @click="openModal = false"
-                            class="absolute top-6 right-6 z-[130] w-12 h-12 rounded-full bg-white text-black flex items-center justify-center hover:bg-red-600 hover:text-white transition-all duration-300 shadow-2xl group">
-                            <svg class="w-6 h-6 group-hover:rotate-90 transition-transform duration-300" fill="none"
-                                stroke="currentColor" viewBox="0 0 24 24">
-                                <path d="M6 18L18 6M6 6l12 12" stroke-width="3" stroke-linecap="round"
-                                    stroke-linejoin="round" />
-                            </svg>
-                        </button>
+        <button type="button" @click="openModal = false"
+            class="absolute top-6 right-6 z-[130] w-12 h-12 rounded-full bg-white text-black flex items-center justify-center hover:bg-red-600 hover:text-white transition-all duration-300 shadow-2xl group">
+            <svg class="w-6 h-6 group-hover:rotate-90 transition-transform duration-300" fill="none"
+                stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M6 18L18 6M6 6l12 12" stroke-width="3" stroke-linecap="round"
+                    stroke-linejoin="round" />
+            </svg>
+        </button>
 
-                        <div class="relative flex-[4] bg-black overflow-hidden flex items-center justify-center">
-                            <template x-for="(slide, index) in currentSlides" :key="index">
-                                <div x-show="currentIndex === index"
-                                    x-transition:enter="transition duration-500 ease-in-out"
-                                    x-transition:enter-start="opacity-0 scale-105"
-                                    x-transition:enter-end="opacity-100 scale-100"
-                                    class="absolute inset-0 flex items-center justify-center p-4 sm:p-12">
-                                    <img :src="slide"
-                                        class="max-w-full max-h-full object-contain select-none shadow-2xl rounded-2xl">
-                                </div>
-                            </template>
+        {{-- Slider Preview --}}
+        <div class="relative flex-[4] bg-black overflow-hidden flex items-center justify-center">
+            <template x-for="(slide, index) in currentSlides" :key="index">
+                <div x-show="currentIndex === index"
+                    x-transition:enter="transition duration-500 ease-in-out"
+                    x-transition:enter-start="opacity-0 scale-105"
+                    x-transition:enter-end="opacity-100 scale-100"
+                    class="absolute inset-0 flex items-center justify-center p-4 sm:p-12">
+                    <img :src="slide"
+                        class="max-w-full max-h-full object-contain select-none shadow-2xl rounded-2xl">
+                </div>
+            </template>
 
-                            <div
-                                class="absolute inset-x-8 top-1/2 -translate-y-1/2 flex justify-between pointer-events-none z-10">
-                                <button type="button" @click="prev()"
-                                    class="pointer-events-auto w-14 h-14 rounded-full bg-white/10 hover:bg-indigo-600 text-white backdrop-blur-md transition-all border border-white/10 flex items-center justify-center">
-                                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
-                                            d="M15 19l-7-7 7-7" />
-                                    </svg>
-                                </button>
-                                <button type="button" @click="next()"
-                                    class="pointer-events-auto w-14 h-14 rounded-full bg-white/10 hover:bg-indigo-600 text-white backdrop-blur-md transition-all border border-white/10 flex items-center justify-center">
-                                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
-                                            d="M9 5l7 7-7 7" />
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
+            <div class="absolute inset-x-8 top-1/2 -translate-y-1/2 flex justify-between pointer-events-none z-10">
+                <button type="button" @click="prev()"
+                    class="pointer-events-auto w-14 h-14 rounded-full bg-white/10 hover:bg-indigo-600 text-white backdrop-blur-md transition-all border border-white/10 flex items-center justify-center">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15 19l-7-7 7-7" />
+                    </svg>
+                </button>
+                <button type="button" @click="next()"
+                    class="pointer-events-auto w-14 h-14 rounded-full bg-white/10 hover:bg-indigo-600 text-white backdrop-blur-md transition-all border border-white/10 flex items-center justify-center">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7" />
+                    </svg>
+                </button>
+            </div>
+        </div>
 
-                        <div
-                            class="w-full md:w-[450px] p-10 flex flex-col justify-between border-l border-white/5 bg-zinc-950 text-white z-20 overflow-y-auto">
-                            <div class="space-y-6">
-                                <div>
-                                    <span
-                                        class="text-indigo-500 text-[10px] font-black uppercase tracking-[0.4em]">Detail
-                                        Pilihan</span>
-                                    <h3 class="text-4xl font-black italic uppercase text-white leading-tight mt-2"
-                                        x-text="activeTitle"></h3>
-                                </div>
+        {{-- Form Side --}}
+        <div class="w-full md:w-[450px] p-10 flex flex-col justify-between border-l border-white/5 bg-zinc-950 text-white z-20 overflow-y-auto">
+            <div class="space-y-6">
+                <div>
+                    <span class="text-indigo-500 text-[10px] font-black uppercase tracking-[0.4em]">Detail Pilihan</span>
+                    <h3 class="text-4xl font-black italic uppercase text-white leading-tight mt-2" x-text="activeTitle"></h3>
+                </div>
 
-                                <div class="grid grid-cols-2 gap-4">
-                                    <div class="space-y-2">
-                                        <label
-                                            class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Jumlah
-                                            (Qty)</label>
-                                        <input type="number" name="quantity" x-model.number="qty" min="1" required
-                                            class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none text-white">
-                                    </div>
-                                    <div class="space-y-2">
-                                        <label
-                                            class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Ukuran</label>
-                                        <select name="size" required
-                                            class="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none text-white appearance-none">
-                                            <option value="S">S</option>
-                                            <option value="M" selected>M</option>
-                                            <option value="L">L</option>
-                                            <option value="XL">XL</option>
-                                            <option value="XXL">XXL</option>
-                                        </select>
-                                    </div>
-                                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                        <label class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Jumlah (Qty)</label>
+                        <input type="number" name="quantity" x-model.number="qty" min="1" required
+                            class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none text-white">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Ukuran</label>
+                        {{-- Tambahkan x-model agar ukuran tersimpan di state --}}
+                        <select name="size" x-model="selectedSize" required
+                            class="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none text-white appearance-none">
+                            <option value="S">S</option>
+                            <option value="M">M</option>
+                            <option value="L">L</option>
+                            <option value="XL">XL</option>
+                            <option value="XXL">XXL</option>
+                        </select>
+                    </div>
+                </div>
 
-                                <div class="space-y-2">
-                                    <label class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Ganti
-                                        Desain (Opsional)</label>
-                                    <input type="file" name="design_file"
-                                        class="w-full text-xs text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 hover:file:bg-indigo-600 transition-all">
-                                    <p class="text-[9px] text-zinc-500 italic">*Biarkan kosong jika ingin desain katalog
-                                        asli</p>
-                                </div>
+                <div class="space-y-2">
+                    <label class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Ganti Desain (Opsional)</label>
+                    {{-- WAJIB: Tambahkan x-ref di sini --}}
+                    <input type="file" name="design_file" x-ref="designFileInput"
+                        class="w-full text-xs text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 hover:file:bg-indigo-600 transition-all">
+                    <p class="text-[9px] text-zinc-500 italic">*Biarkan kosong jika ingin desain katalog asli</p>
+                </div>
 
-                                <div class="space-y-2">
-                                    <label class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Catatan
-                                        Tambahan</label>
-                                    <textarea name="notes" rows="2"
-                                        class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none resize-none text-white"
-                                        placeholder="Contoh: Kaos Putih, Desain di depan.."></textarea>
-                                </div>
-                            </div>
-
-                            <div class="pt-8 mt-8 border-t border-white/10 space-y-6">
-                                <div class="flex flex-col">
-                                    <span
-                                        class="text-zinc-500 text-[11px] font-black uppercase mb-1 tracking-wider">Total
-                                        Harga</span>
-                                    <span class="text-white font-black italic text-4xl tracking-tighter"
-                                        x-text="'Rp ' + (qty * activePrice).toLocaleString('id-ID')"></span>
-                                </div>
-
-                                <button type="button" id="pay-button"
-                                    class="w-full bg-white text-black py-6 rounded-2xl font-black uppercase text-sm tracking-[0.2em] hover:bg-indigo-600 hover:text-white transition-all transform active:scale-95 shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed">
-                                    Konfirmasi & Bayar Sekarang
-                                </button>
-                            </div>
-                        </div>
-                    </form>
+                <div class="space-y-2">
+                    <label class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Catatan Tambahan</label>
+                    {{-- Tambahkan x-model --}}
+                    <textarea name="notes" x-model="notes" rows="2"
+                        class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none resize-none text-white"
+                        placeholder="Contoh: Kaos Putih, Desain di depan.."></textarea>
                 </div>
             </div>
+
+            <div class="pt-8 mt-8 border-t border-white/10 space-y-6">
+                <div class="flex flex-col">
+                    <span class="text-zinc-500 text-[11px] font-black uppercase mb-1 tracking-wider">Total Harga</span>
+                    <span class="text-white font-black italic text-4xl tracking-tighter"
+                        x-text="'Rp ' + (totalPrice).toLocaleString('id-ID')"></span>
+                </div>
+
+                {{-- PERBAIKAN: Gunakan @click="checkout()" dan handle loading state --}}
+                <button type="button" id="pay-button" 
+                    @click="checkout()"
+                    :disabled="loading"
+                    class="w-full bg-white text-black py-6 rounded-2xl font-black uppercase text-sm tracking-[0.2em] hover:bg-indigo-600 hover:text-white transition-all transform active:scale-95 shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span x-show="!loading">Konfirmasi & Bayar Sekarang</span>
+                    <span x-show="loading" class="flex items-center justify-center">
+                        <svg class="animate-spin h-5 w-5 mr-3" viewBox="0 0 24 24">...</svg>
+                        Menghubungkan...
+                    </span>
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+            </div>
             <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+            {{-- Pastikan menggunakan config yang sesuai dengan services.php (biasanya clientKey) --}}
             <script type="text/javascript" src="https://app.sandbox.midtrans.com/snap/snap.js"
-                data-client-key="{{ config('services.midtrans.client_key') }}"></script>
+                data-client-key="{{ config('services.midtrans.clientKey') ?? config('services.midtrans.client_key') }}"></script>
+
             <script type="text/javascript">
                 document.addEventListener('DOMContentLoaded', function () {
                     const payButton = document.getElementById('pay-button');
@@ -658,14 +686,26 @@
                         payButton.addEventListener('click', async function (e) {
                             e.preventDefault();
 
-                            // Ambil data Alpine
-                            const alpineData = Alpine.$data(payButton.closest('[x-data]'));
+                            // Ambil data Alpine - Pastikan komponen x-data membungkus tombol ini
+                            const alpineElement = payButton.closest('[x-data]');
+                            if (!alpineElement) {
+                                console.error("Alpine data not found. Pastikan tombol ada di dalam x-data");
+                                return;
+                            }
+                            const alpineData = Alpine.$data(alpineElement);
 
                             // Loading State
                             payButton.disabled = true;
+                            const originalText = payButton.innerText;
                             payButton.innerText = "MENGHUBUNGKAN...";
 
                             const form = document.getElementById('order-form');
+                            if (!form) {
+                                alert("Error: Form order-form tidak ditemukan!");
+                                resetBtn(payButton, originalText);
+                                return;
+                            }
+
                             const formData = new FormData(form);
 
                             // Tambahkan data dari Alpine secara manual untuk akurasi
@@ -675,8 +715,11 @@
 
                             // Jika tidak ada file yang diupload, kirimkan image katalog yang aktif
                             const fileInput = form.querySelector('input[name="design_file"]');
-                            if (!fileInput.files[0]) {
-                                formData.append('catalog_image', alpineData.currentSlides[alpineData.currentIndex]);
+                            if (!fileInput || !fileInput.files[0]) {
+                                // Pastikan currentSlides dan currentIndex tersedia di Alpine x-data Anda
+                                if (alpineData.currentSlides && alpineData.currentSlides[alpineData.currentIndex]) {
+                                    formData.append('catalog_image', alpineData.currentSlides[alpineData.currentIndex]);
+                                }
                             }
 
                             try {
@@ -689,43 +732,65 @@
                                     }
                                 });
 
+                                // Cek jika response bukan JSON (sering terjadi error 500 di Vercel)
+                                if (!response.ok) {
+                                    const errorText = await response.text();
+                                    console.error("Server Error Raw:", errorText);
+                                    throw new Error("Server error " + response.status);
+                                }
+
                                 const result = await response.json();
 
-                                if (response.ok && result.snap_token) {
+                                if (result.snap_token) {
                                     // PANGGIL MIDTRANS POPUP
                                     window.snap.pay(result.snap_token, {
                                         onSuccess: function (res) { finalizeOrder(result, formData); },
                                         onPending: function (res) { finalizeOrder(result, formData); },
                                         onError: function (res) {
-                                            alert("Pembayaran gagal!");
-                                            resetBtn(payButton);
+                                            Swal.fire('Gagal', 'Pembayaran gagal diproses', 'error');
+                                            resetBtn(payButton, originalText);
                                         },
-                                        onClose: function () { resetBtn(payButton); }
+                                        onClose: function () {
+                                            resetBtn(payButton, originalText);
+                                        }
                                     });
                                 } else {
-                                    alert('Gagal: ' + (result.message || "Terjadi kesalahan data"));
-                                    resetBtn(payButton);
+                                    Swal.fire('Error', result.message || "Gagal mendapatkan token pembayaran", 'error');
+                                    resetBtn(payButton, originalText);
                                 }
                             } catch (error) {
-                                console.error('Error:', error);
-                                alert('Koneksi terputus atau server error.');
-                                resetBtn(payButton);
+                                console.error('Error Detail:', error);
+                                Swal.fire('Koneksi Error', 'Gagal terhubung ke server. Cek jaringan atau konfigurasi server.', 'error');
+                                resetBtn(payButton, originalText);
                             }
                         });
                     }
                 });
 
-                function resetBtn(btn) {
+                function resetBtn(btn, text) {
                     btn.disabled = false;
-                    btn.innerText = "KONFIRMASI & BAYAR SEKARANG";
+                    btn.innerText = text || "KONFIRMASI & BAYAR SEKARANG";
                 }
 
                 async function finalizeOrder(serverResult, originalData) {
-                    originalData.append('snap_token', serverResult.snap_token);
+                    // Hapus file dari FormData sebelum kirim ke finalize untuk menghemat payload (Vercel Limit)
+                    const finalData = new FormData();
+                    originalData.forEach((value, key) => {
+                        if (!(value instanceof File)) {
+                            finalData.append(key, value);
+                        }
+                    });
+
+                    finalData.append('snap_token', serverResult.snap_token);
+                    // Kirim path file yang sudah diupload di tahap store tadi
+                    if (serverResult.design_file) {
+                        finalData.append('design_file_path', serverResult.design_file);
+                    }
+
                     try {
                         const response = await fetch("{{ route('order.finalize') }}", {
                             method: 'POST',
-                            body: originalData,
+                            body: finalData,
                             headers: {
                                 'X-CSRF-TOKEN': '{{ csrf_token() }}',
                                 'Accept': 'application/json'
@@ -734,9 +799,12 @@
                         const finalRes = await response.json();
                         if (finalRes.status === 'success') {
                             window.location.href = finalRes.redirect_url;
+                        } else {
+                            Swal.fire('Database Error', finalRes.message, 'error');
                         }
                     } catch (e) {
-                        alert("Sistem gagal mencatat pesanan.");
+                        console.error('Finalize Error:', e);
+                        Swal.fire('System Error', 'Pesanan terbayar namun gagal dicatat otomatis. Hubungi admin.', 'warning');
                     }
                 }
             </script>
