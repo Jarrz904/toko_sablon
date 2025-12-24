@@ -743,7 +743,6 @@
     </div>
 
     </div>
-@endsection
 
     <style>
         html {
