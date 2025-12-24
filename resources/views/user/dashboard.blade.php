@@ -1,154 +1,79 @@
 <x-app-layout>
-    <div x-data="{ 
-        // --- State Galeri/Modal ---
-        openModal: false, 
-        currentSlides: [], 
-        currentIndex: 0,
-        activeTitle: '',
-        activePrice: 0, 
-        qty: 1,
-        selectedSize: 'M',
-        notes: '',
-        loading: false,
+  <div x-data="{ 
+    openModal: false, currentSlides: [], currentIndex: 0,
+    activeTitle: '', activePrice: 0, qty: 1, selectedSize: 'M', notes: '', loading: false,
 
-        // --- Fungsi Galeri ---
-        openGallery(slides, title, price) {
-            this.currentSlides = slides;
-            this.activeTitle = title;
-            this.activePrice = price;
-            this.qty = 1; 
-            this.currentIndex = 0;
-            this.selectedSize = 'M';
-            this.notes = '';
-            this.openModal = true;
-        },
-        next() {
-            this.currentIndex = (this.currentIndex + 1) % this.currentSlides.length;
-        },
-        prev() {
-            this.currentIndex = (this.currentIndex - 1 + this.currentSlides.length) % this.currentSlides.length;
-        },
-        setIndex(index) {
-            this.currentIndex = index;
-        },
+    openGallery(slides, title, price) {
+        this.currentSlides = slides;
+        this.activeTitle = title;
+        // Langsung bersihkan harga agar jadi angka murni
+        this.activePrice = parseInt(String(price).replace(/[^0-9]/g, '')) || 0;
+        this.qty = 1; this.currentIndex = 0; this.selectedSize = 'M'; this.notes = '';
+        this.openModal = true;
+    },
 
-        // --- Logika Perhitungan ---
-        get totalPrice() {
-            return this.qty * this.activePrice;
-        },
+    get totalPrice() { return this.qty * this.activePrice; },
 
-        // --- Alur Pembayaran Terintegrasi ---
-        async checkout() {
-            if (this.loading) return;
-            
-            // Validasi minimal quantity (Opsional: tambahkan sesuai logika paket Anda)
-            if (this.qty < 1) {
-                Swal.fire('Perhatian', 'Jumlah pesanan minimal 1 pcs', 'warning');
-                return;
-            }
+    async checkout() {
+        if (this.loading || this.qty < 1) return;
+        this.loading = true;
 
-            this.loading = true;
-            
-            let formData = new FormData();
-            formData.append('package_name', this.activeTitle); 
-            formData.append('quantity', this.qty);
-            formData.append('size', this.selectedSize);
-            formData.append('notes', this.notes);
-            formData.append('total_price', this.totalPrice);
-            
-            // Menggunakan x-ref untuk input file
-            const fileInput = this.$refs.designFileInput;
-            if (fileInput && fileInput.files[0]) {
-                formData.append('design_file', fileInput.files[0]);
-            } else {
-                // Mengirimkan path gambar dari katalog jika tidak ada upload
-                formData.append('catalog_image', this.currentSlides[this.currentIndex]);
-            }
+        let formData = new FormData();
+        formData.append('package_name', this.activeTitle);
+        formData.append('quantity', this.qty);
+        formData.append('size', this.selectedSize);
+        formData.append('notes', this.notes);
+        formData.append('total_price', this.totalPrice);
 
-            try {
-                let response = await fetch('{{ route('order.store') }}', {
-                    method: 'POST',
-                    body: formData,
-                    headers: {
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                        'Accept': 'application/json'
-                    }
-                });
+        const fileInput = this.$refs.designFileInput;
+        if (fileInput?.files[0]) {
+            formData.append('design_file', fileInput.files[0]);
+        } else {
+            formData.append('catalog_image', this.currentSlides[this.currentIndex]);
+        }
 
-                if (!response.ok) {
-                    const errData = await response.json();
-                    throw new Error(errData.message || 'Server menyetujui permintaan tapi terjadi kesalahan.');
-                }
-
-                let result = await response.json();
-
-                if (result.snap_token) {
-                    window.snap.pay(result.snap_token, {
-                        onSuccess: (res) => { this.finalizeDatabase(result, formData); },
-                        onPending: (res) => { this.finalizeDatabase(result, formData); },
-                        onError: (res) => { 
-                            Swal.fire('Gagal', 'Pembayaran gagal dilakukan', 'error');
-                            this.loading = false;
-                        },
-                        onClose: () => {
-                            this.loading = false;
-                        }
-                    });
-                } else {
-                    throw new Error(result.message || 'Gagal terhubung ke server pembayaran');
-                }
-            } catch (error) {
-                Swal.fire('Gagal Membuat Pesanan', error.message, 'error');
-                this.loading = false;
-            }
-        },
-
-        async finalizeDatabase(serverResult, originalData) {
-            // Kita buat FormData baru khusus untuk Finalize
-            // Vercel sering gagal jika mengirim ulang File Objek yang sama di request kedua
-            let finalData = new FormData();
-            
-            // Pindahkan data teks saja dari originalData
-            originalData.forEach((value, key) => {
-                if (!(value instanceof File)) {
-                    finalData.append(key, value);
-                }
+        try {
+            let res = await fetch('{{ route('order.store') }}', {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json' }
             });
 
-            // Tambahkan data dari server (Snap Token dan Path File yang sudah tersimpan di storage sementara)
-            finalData.append('snap_token', serverResult.snap_token);
-            if (serverResult.design_file) {
-                finalData.append('design_file_path', serverResult.design_file);
-            }
+            let result = await res.json();
+            if (!res.ok) throw new Error(result.message || 'Gagal membuat pesanan');
 
-            try {
-                let response = await fetch('{{ route('order.finalize') }}', {
-                    method: 'POST',
-                    body: finalData,
-                    headers: {
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                        'Accept': 'application/json'
-                    }
-                });
-
-                let finalRes = await response.json();
-                if (finalRes.status === 'success') {
-                    window.location.href = finalRes.redirect_url;
-                } else {
-                    throw new Error(finalRes.message);
-                }
-            } catch (e) {
-                console.error('Finalize Error:', e);
-                Swal.fire({
-                    title: 'Peringatan',
-                    text: 'Pembayaran berhasil, namun pencatatan otomatis gagal. Jangan tutup halaman ini dan hubungi admin.',
-                    icon: 'warning',
-                    confirmButtonText: 'OK'
-                });
-                this.loading = false;
-            }
+            window.snap.pay(result.snap_token, {
+                onSuccess: (res) => this.sendFinalize(result, formData),
+                onPending: (res) => this.sendFinalize(result, formData),
+                onError: () => { this.loading = false; Swal.fire('Gagal', 'Pembayaran gagal', 'error'); },
+                onClose: () => this.loading = false
+            });
+        } catch (error) {
+            Swal.fire('Error', error.message, 'error');
+            this.loading = false;
         }
-    }">
+    },
+
+    async sendFinalize(serverResult, originalData) {
+        let finalData = new FormData();
+        // Hanya pindahkan data teks agar ringan
+        originalData.forEach((val, key) => { if (!(val instanceof File)) finalData.append(key, val); });
+        finalData.append('snap_token', serverResult.snap_token);
+        if (serverResult.design_file) finalData.append('design_file_path', serverResult.design_file);
+
+        try {
+            let res = await fetch('{{ route('order.finalize') }}', {
+                method: 'POST',
+                body: finalData,
+                headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json' }
+            });
+            let final = await res.json();
+            window.location.href = final.redirect_url;
+        } catch (e) {
+            Swal.fire('Peringatan', 'Pembayaran berhasil, tapi gagal mencatat. Hubungi Admin!', 'warning');
+        }
+    }
+}">
         <div class="relative bg-black h-[550px] flex items-center overflow-hidden">
             <div class="absolute inset-0 z-0">
                 <img src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80"
@@ -547,263 +472,275 @@
                 </div>
 
                 <div x-show="openModal" x-cloak x-transition:enter="transition ease-out duration-300"
-    x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
-    x-transition:leave="transition ease-in duration-200"
-    x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
-    class="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black"
-    @keydown.escape.window="openModal = false">
+                    x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+                    x-transition:leave="transition ease-in duration-200"
+                    x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+                    class="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black"
+                    @keydown.escape.window="openModal = false">
 
-    <div @click="openModal = false" class="absolute inset-0 bg-black/90 backdrop-blur-sm"></div>
+                    <div @click="openModal = false" class="absolute inset-0 bg-black/90 backdrop-blur-sm"></div>
 
-    {{-- Ganti action ke '#' karena kita handle via Fetch/AJAX di checkout() --}}
-    <form action="#" id="order-form" method="POST"
-        enctype="multipart/form-data"
-        class="relative w-full max-w-7xl h-[90vh] bg-zinc-950 rounded-[2.5rem] overflow-hidden shadow-[0_0_80px_rgba(0,0,0,1)] border border-white/10 flex flex-col md:flex-row">
-        @csrf
+                    {{-- Ganti action ke '#' karena kita handle via Fetch/AJAX di checkout() --}}
+                    <form action="#" id="order-form" method="POST" enctype="multipart/form-data"
+                        class="relative w-full max-w-7xl h-[90vh] bg-zinc-950 rounded-[2.5rem] overflow-hidden shadow-[0_0_80px_rgba(0,0,0,1)] border border-white/10 flex flex-col md:flex-row">
+                        @csrf
 
-        {{-- Hidden inputs untuk data tambahan --}}
-        <input type="hidden" name="package_name" x-bind:value="activeTitle">
-        <input type="hidden" name="total_price" x-bind:value="totalPrice">
-        <input type="hidden" name="source" value="catalog">
+                        {{-- Hidden inputs untuk data tambahan --}}
+                        <input type="hidden" name="package_name" x-bind:value="activeTitle">
+                        <input type="hidden" name="total_price" x-bind:value="totalPrice">
+                        <input type="hidden" name="source" value="catalog">
 
-        <button type="button" @click="openModal = false"
-            class="absolute top-6 right-6 z-[130] w-12 h-12 rounded-full bg-white text-black flex items-center justify-center hover:bg-red-600 hover:text-white transition-all duration-300 shadow-2xl group">
-            <svg class="w-6 h-6 group-hover:rotate-90 transition-transform duration-300" fill="none"
-                stroke="currentColor" viewBox="0 0 24 24">
-                <path d="M6 18L18 6M6 6l12 12" stroke-width="3" stroke-linecap="round"
-                    stroke-linejoin="round" />
-            </svg>
-        </button>
+                        <button type="button" @click="openModal = false"
+                            class="absolute top-6 right-6 z-[130] w-12 h-12 rounded-full bg-white text-black flex items-center justify-center hover:bg-red-600 hover:text-white transition-all duration-300 shadow-2xl group">
+                            <svg class="w-6 h-6 group-hover:rotate-90 transition-transform duration-300" fill="none"
+                                stroke="currentColor" viewBox="0 0 24 24">
+                                <path d="M6 18L18 6M6 6l12 12" stroke-width="3" stroke-linecap="round"
+                                    stroke-linejoin="round" />
+                            </svg>
+                        </button>
 
-        {{-- Slider Preview --}}
-        <div class="relative flex-[4] bg-black overflow-hidden flex items-center justify-center">
-            <template x-for="(slide, index) in currentSlides" :key="index">
-                <div x-show="currentIndex === index"
-                    x-transition:enter="transition duration-500 ease-in-out"
-                    x-transition:enter-start="opacity-0 scale-105"
-                    x-transition:enter-end="opacity-100 scale-100"
-                    class="absolute inset-0 flex items-center justify-center p-4 sm:p-12">
-                    <img :src="slide"
-                        class="max-w-full max-h-full object-contain select-none shadow-2xl rounded-2xl">
+                        {{-- Slider Preview --}}
+                        <div class="relative flex-[4] bg-black overflow-hidden flex items-center justify-center">
+                            <template x-for="(slide, index) in currentSlides" :key="index">
+                                <div x-show="currentIndex === index"
+                                    x-transition:enter="transition duration-500 ease-in-out"
+                                    x-transition:enter-start="opacity-0 scale-105"
+                                    x-transition:enter-end="opacity-100 scale-100"
+                                    class="absolute inset-0 flex items-center justify-center p-4 sm:p-12">
+                                    <img :src="slide"
+                                        class="max-w-full max-h-full object-contain select-none shadow-2xl rounded-2xl">
+                                </div>
+                            </template>
+
+                            <div
+                                class="absolute inset-x-8 top-1/2 -translate-y-1/2 flex justify-between pointer-events-none z-10">
+                                <button type="button" @click="prev()"
+                                    class="pointer-events-auto w-14 h-14 rounded-full bg-white/10 hover:bg-indigo-600 text-white backdrop-blur-md transition-all border border-white/10 flex items-center justify-center">
+                                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
+                                            d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                </button>
+                                <button type="button" @click="next()"
+                                    class="pointer-events-auto w-14 h-14 rounded-full bg-white/10 hover:bg-indigo-600 text-white backdrop-blur-md transition-all border border-white/10 flex items-center justify-center">
+                                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
+                                            d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        {{-- Form Side --}}
+                        <div
+                            class="w-full md:w-[450px] p-10 flex flex-col justify-between border-l border-white/5 bg-zinc-950 text-white z-20 overflow-y-auto">
+                            <div class="space-y-6">
+                                <div>
+                                    <span
+                                        class="text-indigo-500 text-[10px] font-black uppercase tracking-[0.4em]">Detail
+                                        Pilihan</span>
+                                    <h3 class="text-4xl font-black italic uppercase text-white leading-tight mt-2"
+                                        x-text="activeTitle"></h3>
+                                </div>
+
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div class="space-y-2">
+                                        <label
+                                            class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Jumlah
+                                            (Qty)</label>
+                                        <input type="number" name="quantity" x-model.number="qty" min="1" required
+                                            class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none text-white">
+                                    </div>
+                                    <div class="space-y-2">
+                                        <label
+                                            class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Ukuran</label>
+                                        {{-- Tambahkan x-model agar ukuran tersimpan di state --}}
+                                        <select name="size" x-model="selectedSize" required
+                                            class="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none text-white appearance-none">
+                                            <option value="S">S</option>
+                                            <option value="M">M</option>
+                                            <option value="L">L</option>
+                                            <option value="XL">XL</option>
+                                            <option value="XXL">XXL</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="space-y-2">
+                                    <label class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Ganti
+                                        Desain (Opsional)</label>
+                                    {{-- WAJIB: Tambahkan x-ref di sini --}}
+                                    <input type="file" name="design_file" x-ref="designFileInput"
+                                        class="w-full text-xs text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 hover:file:bg-indigo-600 transition-all">
+                                    <p class="text-[9px] text-zinc-500 italic">*Biarkan kosong jika ingin desain katalog
+                                        asli</p>
+                                </div>
+
+                                <div class="space-y-2">
+                                    <label class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Catatan
+                                        Tambahan</label>
+                                    {{-- Tambahkan x-model --}}
+                                    <textarea name="notes" x-model="notes" rows="2"
+                                        class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none resize-none text-white"
+                                        placeholder="Contoh: Kaos Putih, Desain di depan.."></textarea>
+                                </div>
+                            </div>
+
+                            <div class="pt-8 mt-8 border-t border-white/10 space-y-6">
+                                <div class="flex flex-col">
+                                    <span
+                                        class="text-zinc-500 text-[11px] font-black uppercase mb-1 tracking-wider">Total
+                                        Harga</span>
+                                    <span class="text-white font-black italic text-4xl tracking-tighter"
+                                        x-text="'Rp ' + (totalPrice).toLocaleString('id-ID')"></span>
+                                </div>
+
+                                {{-- PERBAIKAN: Gunakan @click="checkout()" dan handle loading state --}}
+                                <button type="button" id="pay-button" @click="checkout()" :disabled="loading"
+                                    class="w-full bg-white text-black py-6 rounded-2xl font-black uppercase text-sm tracking-[0.2em] hover:bg-indigo-600 hover:text-white transition-all transform active:scale-95 shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed">
+                                    <span x-show="!loading">Konfirmasi & Bayar Sekarang</span>
+                                    <span x-show="loading" class="flex items-center justify-center">
+                                        <svg class="animate-spin h-5 w-5 mr-3" viewBox="0 0 24 24">...</svg>
+                                        Menghubungkan...
+                                    </span>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
                 </div>
-            </template>
-
-            <div class="absolute inset-x-8 top-1/2 -translate-y-1/2 flex justify-between pointer-events-none z-10">
-                <button type="button" @click="prev()"
-                    class="pointer-events-auto w-14 h-14 rounded-full bg-white/10 hover:bg-indigo-600 text-white backdrop-blur-md transition-all border border-white/10 flex items-center justify-center">
-                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15 19l-7-7 7-7" />
-                    </svg>
-                </button>
-                <button type="button" @click="next()"
-                    class="pointer-events-auto w-14 h-14 rounded-full bg-white/10 hover:bg-indigo-600 text-white backdrop-blur-md transition-all border border-white/10 flex items-center justify-center">
-                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7" />
-                    </svg>
-                </button>
             </div>
-        </div>
+            <script type="text/javascript">
+                document.addEventListener('DOMContentLoaded', function () {
+                    const payButton = document.getElementById('pay-button');
 
-        {{-- Form Side --}}
-        <div class="w-full md:w-[450px] p-10 flex flex-col justify-between border-l border-white/5 bg-zinc-950 text-white z-20 overflow-y-auto">
-            <div class="space-y-6">
-                <div>
-                    <span class="text-indigo-500 text-[10px] font-black uppercase tracking-[0.4em]">Detail Pilihan</span>
-                    <h3 class="text-4xl font-black italic uppercase text-white leading-tight mt-2" x-text="activeTitle"></h3>
-                </div>
+                    if (payButton) {
+                        payButton.addEventListener('click', async function (e) {
+                            e.preventDefault();
 
-                <div class="grid grid-cols-2 gap-4">
-                    <div class="space-y-2">
-                        <label class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Jumlah (Qty)</label>
-                        <input type="number" name="quantity" x-model.number="qty" min="1" required
-                            class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none text-white">
-                    </div>
-                    <div class="space-y-2">
-                        <label class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Ukuran</label>
-                        {{-- Tambahkan x-model agar ukuran tersimpan di state --}}
-                        <select name="size" x-model="selectedSize" required
-                            class="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none text-white appearance-none">
-                            <option value="S">S</option>
-                            <option value="M">M</option>
-                            <option value="L">L</option>
-                            <option value="XL">XL</option>
-                            <option value="XXL">XXL</option>
-                        </select>
-                    </div>
-                </div>
+                            // 1. Ambil data Alpine dengan validasi ekstra
+                            const alpineElement = payButton.closest('[x-data]');
+                            if (!alpineElement) {
+                                console.error("Alpine data not found!");
+                                Swal.fire('Error', 'Sistem gagal mengambil data produk. Hubungi Admin.', 'error');
+                                return;
+                            }
+                            const alpineData = Alpine.$data(alpineElement);
 
-                <div class="space-y-2">
-                    <label class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Ganti Desain (Opsional)</label>
-                    {{-- WAJIB: Tambahkan x-ref di sini --}}
-                    <input type="file" name="design_file" x-ref="designFileInput"
-                        class="w-full text-xs text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 hover:file:bg-indigo-600 transition-all">
-                    <p class="text-[9px] text-zinc-500 italic">*Biarkan kosong jika ingin desain katalog asli</p>
-                </div>
+                            // 2. Loading State
+                            payButton.disabled = true;
+                            const originalText = payButton.innerText;
+                            payButton.innerText = "MENGHUBUNGKAN...";
 
-                <div class="space-y-2">
-                    <label class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Catatan Tambahan</label>
-                    {{-- Tambahkan x-model --}}
-                    <textarea name="notes" x-model="notes" rows="2"
-                        class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none resize-none text-white"
-                        placeholder="Contoh: Kaos Putih, Desain di depan.."></textarea>
-                </div>
-            </div>
-
-            <div class="pt-8 mt-8 border-t border-white/10 space-y-6">
-                <div class="flex flex-col">
-                    <span class="text-zinc-500 text-[11px] font-black uppercase mb-1 tracking-wider">Total Harga</span>
-                    <span class="text-white font-black italic text-4xl tracking-tighter"
-                        x-text="'Rp ' + (totalPrice).toLocaleString('id-ID')"></span>
-                </div>
-
-                {{-- PERBAIKAN: Gunakan @click="checkout()" dan handle loading state --}}
-                <button type="button" id="pay-button" 
-                    @click="checkout()"
-                    :disabled="loading"
-                    class="w-full bg-white text-black py-6 rounded-2xl font-black uppercase text-sm tracking-[0.2em] hover:bg-indigo-600 hover:text-white transition-all transform active:scale-95 shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed">
-                    <span x-show="!loading">Konfirmasi & Bayar Sekarang</span>
-                    <span x-show="loading" class="flex items-center justify-center">
-                        <svg class="animate-spin h-5 w-5 mr-3" viewBox="0 0 24 24">...</svg>
-                        Menghubungkan...
-                    </span>
-                </button>
-            </div>
-        </div>
-    </form>
-</div>
-            </div>
-          <script type="text/javascript">
-    document.addEventListener('DOMContentLoaded', function () {
-        const payButton = document.getElementById('pay-button');
-
-        if (payButton) {
-            payButton.addEventListener('click', async function (e) {
-                e.preventDefault();
-
-                // 1. Ambil data Alpine dengan validasi ekstra
-                const alpineElement = payButton.closest('[x-data]');
-                if (!alpineElement) {
-                    console.error("Alpine data not found!");
-                    Swal.fire('Error', 'Sistem gagal mengambil data produk. Hubungi Admin.', 'error');
-                    return;
-                }
-                const alpineData = Alpine.$data(alpineElement);
-
-                // 2. Loading State
-                payButton.disabled = true;
-                const originalText = payButton.innerText;
-                payButton.innerText = "MENGHUBUNGKAN...";
-
-                const form = document.getElementById('order-form');
-                if (!form) {
-                    alert("Error: Form order-form tidak ditemukan!");
-                    resetBtn(payButton, originalText);
-                    return;
-                }
-
-                // 3. Persiapkan Form Data
-                const formData = new FormData(form);
-                
-                // Bersihkan harga dari titik/koma jika ada (supaya jadi angka murni)
-                const rawPrice = String(alpineData.activePrice).replace(/[^0-9]/g, '');
-                const finalTotalPrice = parseInt(alpineData.qty) * parseInt(rawPrice);
-
-                formData.set('package_name', alpineData.activeTitle);
-                formData.set('quantity', alpineData.qty);
-                formData.set('total_price', finalTotalPrice);
-
-                // Handling katalog image jika tidak upload file
-                const fileInput = form.querySelector('input[name="design_file"]');
-                if (!fileInput || !fileInput.files[0]) {
-                    if (alpineData.currentSlides && alpineData.currentSlides[alpineData.currentIndex]) {
-                        formData.append('catalog_image', alpineData.currentSlides[alpineData.currentIndex]);
-                    }
-                }
-
-                try {
-                    // Gunakan route orders.store (sesuaikan dengan web.php Anda)
-                    const response = await fetch("{{ route('orders.store') }}", {
-                        method: 'POST',
-                        body: formData,
-                        headers: {
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                            'Accept': 'application/json'
-                        }
-                    });
-
-                    // Cek jika server kirim error 500 atau 422
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        console.error("Server Error Response:", errorData);
-                        throw new Error(errorData.message || "Validasi gagal atau server error");
-                    }
-
-                    const result = await response.json();
-
-                    if (result.snap_token) {
-                        window.snap.pay(result.snap_token, {
-                            onSuccess: function (res) { finalizeOrder(result, formData); },
-                            onPending: function (res) { finalizeOrder(result, formData); },
-                            onError: function (res) {
-                                Swal.fire('Gagal', 'Pembayaran gagal diproses', 'error');
+                            const form = document.getElementById('order-form');
+                            if (!form) {
+                                alert("Error: Form order-form tidak ditemukan!");
                                 resetBtn(payButton, originalText);
-                            },
-                            onClose: function () {
+                                return;
+                            }
+
+                            // 3. Persiapkan Form Data
+                            const formData = new FormData(form);
+
+                            // Bersihkan harga dari titik/koma jika ada (supaya jadi angka murni)
+                            const rawPrice = String(alpineData.activePrice).replace(/[^0-9]/g, '');
+                            const finalTotalPrice = parseInt(alpineData.qty) * parseInt(rawPrice);
+
+                            formData.set('package_name', alpineData.activeTitle);
+                            formData.set('quantity', alpineData.qty);
+                            formData.set('total_price', finalTotalPrice);
+
+                            // Handling katalog image jika tidak upload file
+                            const fileInput = form.querySelector('input[name="design_file"]');
+                            if (!fileInput || !fileInput.files[0]) {
+                                if (alpineData.currentSlides && alpineData.currentSlides[alpineData.currentIndex]) {
+                                    formData.append('catalog_image', alpineData.currentSlides[alpineData.currentIndex]);
+                                }
+                            }
+
+                            try {
+                                // Gunakan route orders.store (sesuaikan dengan web.php Anda)
+                                const response = await fetch("{{ route('orders.store') }}", {
+                                    method: 'POST',
+                                    body: formData,
+                                    headers: {
+                                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                        'Accept': 'application/json'
+                                    }
+                                });
+
+                                // Cek jika server kirim error 500 atau 422
+                                if (!response.ok) {
+                                    const errorData = await response.json();
+                                    console.error("Server Error Response:", errorData);
+                                    throw new Error(errorData.message || "Validasi gagal atau server error");
+                                }
+
+                                const result = await response.json();
+
+                                if (result.snap_token) {
+                                    window.snap.pay(result.snap_token, {
+                                        onSuccess: function (res) { finalizeOrder(result, formData); },
+                                        onPending: function (res) { finalizeOrder(result, formData); },
+                                        onError: function (res) {
+                                            Swal.fire('Gagal', 'Pembayaran gagal diproses', 'error');
+                                            resetBtn(payButton, originalText);
+                                        },
+                                        onClose: function () {
+                                            resetBtn(payButton, originalText);
+                                        }
+                                    });
+                                } else {
+                                    throw new Error(result.message || "Gagal mendapatkan token Midtrans");
+                                }
+
+                            } catch (error) {
+                                console.error('Error Detail:', error);
+                                Swal.fire('Gagal Membuat Pesanan', error.message, 'error');
                                 resetBtn(payButton, originalText);
                             }
                         });
-                    } else {
-                        throw new Error(result.message || "Gagal mendapatkan token Midtrans");
+                    }
+                });
+
+                function resetBtn(btn, text) {
+                    btn.disabled = false;
+                    btn.innerText = text || "KONFIRMASI & BAYAR SEKARANG";
+                }
+
+                async function finalizeOrder(serverResult, originalData) {
+                    const finalData = new FormData();
+                    originalData.forEach((value, key) => {
+                        if (!(value instanceof File)) {
+                            finalData.append(key, value);
+                        }
+                    });
+
+                    finalData.append('snap_token', serverResult.snap_token);
+                    if (serverResult.design_file) {
+                        finalData.append('design_file_path', serverResult.design_file);
                     }
 
-                } catch (error) {
-                    console.error('Error Detail:', error);
-                    Swal.fire('Gagal Membuat Pesanan', error.message, 'error');
-                    resetBtn(payButton, originalText);
+                    try {
+                        const response = await fetch("{{ route('order.finalize') }}", {
+                            method: 'POST',
+                            body: finalData,
+                            headers: {
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                'Accept': 'application/json'
+                            }
+                        });
+                        const finalRes = await response.json();
+                        if (finalRes.status === 'success') {
+                            window.location.href = finalRes.redirect_url;
+                        } else {
+                            Swal.fire('Database Error', finalRes.message, 'error');
+                        }
+                    } catch (e) {
+                        console.error('Finalize Error:', e);
+                        Swal.fire('System Error', 'Pesanan gagal dicatat otomatis. Hubungi admin.', 'warning');
+                    }
                 }
-            });
-        }
-    });
-
-    function resetBtn(btn, text) {
-        btn.disabled = false;
-        btn.innerText = text || "KONFIRMASI & BAYAR SEKARANG";
-    }
-
-    async function finalizeOrder(serverResult, originalData) {
-        const finalData = new FormData();
-        originalData.forEach((value, key) => {
-            if (!(value instanceof File)) {
-                finalData.append(key, value);
-            }
-        });
-
-        finalData.append('snap_token', serverResult.snap_token);
-        if (serverResult.design_file) {
-            finalData.append('design_file_path', serverResult.design_file);
-        }
-
-        try {
-            const response = await fetch("{{ route('order.finalize') }}", {
-                method: 'POST',
-                body: finalData,
-                headers: {
-                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                    'Accept': 'application/json'
-                }
-            });
-            const finalRes = await response.json();
-            if (finalRes.status === 'success') {
-                window.location.href = finalRes.redirect_url;
-            } else {
-                Swal.fire('Database Error', finalRes.message, 'error');
-            }
-        } catch (e) {
-            console.error('Finalize Error:', e);
-            Swal.fire('System Error', 'Pesanan gagal dicatat otomatis. Hubungi admin.', 'warning');
-        }
-    }
-</script>
+            </script>
         </div>
     </div>
     </form>
