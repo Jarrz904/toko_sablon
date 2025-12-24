@@ -5,6 +5,7 @@ use App\Http\Controllers\OrderController;
 use App\Http\Controllers\AdminOrderController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\UserController;
+use App\Models\Order;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
 
@@ -38,23 +39,45 @@ Route::middleware('auth')->group(function () {
     // --- ROLE: USER ONLY ---
     Route::middleware(['verified', 'role:user'])->group(function () {
         
-        // FITUR 1: PEMESANAN PAKET
+        /**
+         * FITUR 1: PEMESANAN PAKET (Halaman Khusus)
+         * Menggunakan OrderController
+         */
         Route::get('/order/create', [OrderController::class, 'create'])->name('order.create');
         Route::post('/order/store', [OrderController::class, 'store'])->name('order.store');
         
-        // FIX: TAMBAHAN ROUTE FINALIZE
+        /**
+         * FIX: TAMBAHAN ROUTE FINALIZE
+         * Digunakan untuk menyimpan data permanen setelah pop-up Midtrans muncul
+         */
         Route::post('/order/finalize', [OrderController::class, 'finalize'])->name('order.finalize');
         
-        // FITUR 2: PEMESANAN SATUAN
+        /**
+         * FITUR 2: PEMESANAN SATUAN (Dari Dashboard)
+         * Menggunakan UserController agar tetap berfungsi
+         */
         Route::get('/order/new', [UserController::class, 'create'])->name('orders.create'); 
         Route::post('/order/save', [UserController::class, 'store'])->name('orders.store'); 
 
-        // STATUS, RIWAYAT & DETAIL
+        /**
+         * STATUS, RIWAYAT & DETAIL
+         * Menggunakan OrderController sebagai pusat data pesanan
+         */
+        // Route Status: Menampilkan pesanan aktif (Pending/Proses)
+        // Arahkan ke method index di OrderController
         Route::get('/status-pesanan', [OrderController::class, 'index'])->name('user.status');
+        
+        // Route Riwayat: Menampilkan pesanan yang sudah selesai/seluruhnya
+        // Jika Anda ingin tampilan berbeda, Anda bisa membuat method 'history' di OrderController
         Route::get('/riwayat-pesanan', [OrderController::class, 'index'])->name('user.history');
+        
+        // Route Detail Pesanan
         Route::get('/order-detail/{order}', [OrderController::class, 'show'])->name('order.show');
 
-        // PEMBATALAN PESANAN
+        /**
+         * PEMBATALAN PESANAN
+         * Mendukung pemanggilan dari kedua Controller
+         */
         Route::delete('/user/order/{id}', [OrderController::class, 'destroy'])->name('user.order.destroy');
         Route::delete('/order/cancel/{id}', [UserController::class, 'destroy'])->name('order.destroy'); 
     });
