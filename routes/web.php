@@ -1,22 +1,27 @@
 <?php
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Auth;
+use App\Http\Controllers\AdminOrderController;
+use App\Http\Controllers\DashboardController;
 
-Route::get('/debug-final', function () {
-    $results = [
-        'database' => 'Mengecek...',
-        'auth' => 'Mengecek...',
-    ];
+// Rute untuk User Biasa
+Route::get('/dashboard', [DashboardController::class, 'index'])
+    ->middleware(['auth', 'role:user'])
+    ->name('dashboard');
 
-    try {
-        DB::connection()->getPdo();
-        $results['database'] = 'TERKONEKSI';
-    } catch (\Exception $e) {
-        $results['database'] = $e->getMessage();
-    }
+// Rute untuk Admin
+Route::middleware(['auth', 'role:admin'])->group(function () {
+    // Halaman Utama Admin
+    Route::get('/admin/dashboard', [AdminOrderController::class, 'index'])
+        ->name('admin.dashboard');
 
-    $results['auth'] = Auth::check() ? 'LOGGED_IN' : 'NOT_LOGGED_IN';
-    $results['session_driver'] = config('session.driver');
+    // Simpan Pesanan (Manual)
+    Route::post('/admin/order/store', [AdminOrderController::class, 'store'])
+        ->name('admin.order.store');
 
-    return response()->json($results);
+    // Update Status (Sesuai dengan view Anda)
+    Route::patch('/admin/order/update/{order}/{status}', [AdminOrderController::class, 'updateStatus'])
+        ->name('admin.order.update');
+
+    // Hapus Pesanan
+    Route::delete('/admin/order/destroy/{id}', [AdminOrderController::class, 'destroy'])
+        ->name('admin.order.destroy');
 });

@@ -11,24 +11,24 @@ class RoleManager
 {
     public function handle(Request $request, Closure $next, $role): Response
     {
+        // 1. Pastikan user sudah login
         if (!Auth::check()) {
             return redirect()->route('login');
         }
 
         $userRole = Auth::user()->role;
 
-        // CEK: Jika role user TIDAK SESUAI dengan syarat route
-        if ($userRole !== $role) {
-            // Jika dia admin tapi buka rute 'user', lempar ke admin dashboard
-            if ($userRole === 'admin') {
-                return redirect()->route('admin.dashboard');
-            }
-            // Jika dia user tapi buka rute 'admin', lempar ke dashboard user
-            if ($userRole === 'user') {
-                return redirect()->route('dashboard');
-            }
+        // 2. Jika role sesuai, langsung izinkan lewat
+        if ($userRole === $role) {
+            return $next($request);
         }
 
-        return $next($request);
+        // 3. Jika TIDAK sesuai, arahkan ke halaman utama masing-masing role
+        // Ini mencegah redirect loop jika user mencoba akses rute yang salah
+        return match($userRole) {
+            'admin' => redirect()->route('admin.dashboard'),
+            'vendor' => redirect()->route('vendor.dashboard'), // sesuaikan jika ada role vendor
+            default => redirect()->route('dashboard'),
+        };
     }
 }
