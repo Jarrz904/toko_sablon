@@ -10,12 +10,15 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
-->withMiddleware(function (Middleware $middleware) {
-    $middleware->alias([
-        // Daftarkan alias 'role' ke class RoleManager Anda
-        'role' => \App\Http\Middleware\RoleManager::class,
-    ]);
-})
-    ->withExceptions(function (Exceptions $exceptions): void {
+    ->withMiddleware(function (Middleware $middleware) {
+        // 1. Mempercayai Proxy Vercel (Sangat Penting agar Login Tidak Error 500)
+        $middleware->trustProxies(at: '*');
+
+        // 2. Konfigurasi alias Anda sebelumnya (Tetap Dipertahankan)
+        $middleware->alias([
+            'role' => \App\Http\Middleware\RoleManager::class,
+        ]);
+    })
+    ->withExceptions(function (Exceptions $exceptions) {
         //
     })->create();
