@@ -1,5 +1,4 @@
 <x-app-layout>
-    @section
    <div x-data="{ 
         // --- State Galeri/Modal ---
         openModal: false, 
