@@ -1,31 +1,98 @@
 <?php
-use App\Http\Controllers\AdminOrderController;
-use Illuminate\Support\Facades\Route;
 
-// 1. Rute Halaman Depan
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\OrderController;
+use App\Http\Controllers\AdminOrderController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\UserController;
+use App\Models\Order;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Auth;
+
+/*
+|--------------------------------------------------------------------------
+| Web Routes
+|--------------------------------------------------------------------------
+*/
+
+// 1. Landing Page
 Route::get('/', function () {
     return view('welcome');
-});
+})->name('home');
 
-// 2. Rute Auth (Login/Register - otomatis dari Breeze)
-require __DIR__.'/auth.php';
+// 2. Tentang Kami
+Route::view('/about', 'user.about')->name('about');
 
-// 3. Rute Khusus Admin (Harus Login & Role Admin)
-Route::middleware(['auth', 'role:admin'])->group(function () {
+// 3. Auth Group
+Route::middleware('auth')->group(function () {
     
-    // Dashboard Utama Admin
-    Route::get('/admin/dashboard', [AdminOrderController::class, 'index'])
-        ->name('admin.dashboard');
+    // Dashboard Universal
+    Route::get('/dashboard', [DashboardController::class, 'index'])
+        ->middleware(['verified'])
+        ->name('dashboard');
 
-    // Simpan Pesanan Baru
-    Route::post('/admin/order', [AdminOrderController::class, 'store'])
-        ->name('admin.order.store');
+    // Profile
+    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
-    // Update Status Pesanan
-    Route::patch('/admin/order/{order}/{status}', [AdminOrderController::class, 'updateStatus'])
-        ->name('admin.order.update');
+    // --- ROLE: USER ONLY ---
+    Route::middleware(['verified', 'role:user'])->group(function () {
+        
+        /**
+         * FITUR 1: PEMESANAN PAKET (Halaman Khusus)
+         * Menggunakan OrderController
+         */
+        Route::get('/order/create', [OrderController::class, 'create'])->name('order.create');
+        Route::post('/order/store', [OrderController::class, 'store'])->name('order.store');
+        
+        /**
+         * FIX: TAMBAHAN ROUTE FINALIZE
+         * Digunakan untuk menyimpan data permanen setelah pop-up Midtrans muncul
+         */
+        Route::post('/order/finalize', [OrderController::class, 'finalize'])->name('order.finalize');
+        
+        /**
+         * FITUR 2: PEMESANAN SATUAN (Dari Dashboard)
+         * Menggunakan UserController agar tetap berfungsi
+         */
+        Route::get('/order/new', [UserController::class, 'create'])->name('orders.create'); 
+        Route::post('/order/save', [UserController::class, 'store'])->name('orders.store'); 
 
-    // Hapus Pesanan
-    Route::delete('/admin/order/{id}', [AdminOrderController::class, 'destroy'])
-        ->name('admin.order.destroy');
+        /**
+         * STATUS, RIWAYAT & DETAIL
+         * Menggunakan OrderController sebagai pusat data pesanan
+         */
+        // Route Status: Menampilkan pesanan aktif (Pending/Proses)
+        // Arahkan ke method index di OrderController
+        Route::get('/status-pesanan', [OrderController::class, 'index'])->name('user.status');
+        
+        // Route Riwayat: Menampilkan pesanan yang sudah selesai/seluruhnya
+        // Jika Anda ingin tampilan berbeda, Anda bisa membuat method 'history' di OrderController
+        Route::get('/riwayat-pesanan', [OrderController::class, 'index'])->name('user.history');
+        
+        // Route Detail Pesanan
+        Route::get('/order-detail/{order}', [OrderController::class, 'show'])->name('order.show');
+
+        /**
+         * PEMBATALAN PESANAN
+         * Mendukung pemanggilan dari kedua Controller
+         */
+        Route::delete('/user/order/{id}', [OrderController::class, 'destroy'])->name('user.order.destroy');
+        Route::delete('/order/cancel/{id}', [UserController::class, 'destroy'])->name('order.destroy'); 
+    });
+
+    // --- ROLE: ADMIN ONLY ---
+    Route::middleware(['verified', 'role:admin'])->prefix('admin')->group(function () {
+        Route::get('/dashboard', [AdminOrderController::class, 'index'])->name('admin.dashboard');
+        Route::get('/users', [AdminOrderController::class, 'userIndex'])->name('admin.users');
+        
+        // Proses Admin (Store, Update, Delete)
+        Route::post('/order/store', [AdminOrderController::class, 'store'])->name('admin.order.store');
+        Route::patch('/order/{order}/{status}', [AdminOrderController::class, 'updateStatus'])->name('admin.order.update');
+        Route::delete('/order/{order}', [AdminOrderController::class, 'destroy'])->name('admin.order.destroy');
+    });
+
 });
+
+require __DIR__.'/auth.php';
