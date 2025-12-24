@@ -1,27 +1,31 @@
 <?php
 use App\Http\Controllers\AdminOrderController;
-use App\Http\Controllers\DashboardController;
+use Illuminate\Support\Facades\Route;
 
-// Rute untuk User Biasa
-Route::get('/dashboard', [DashboardController::class, 'index'])
-    ->middleware(['auth', 'role:user'])
-    ->name('dashboard');
+// 1. Rute Halaman Depan
+Route::get('/', function () {
+    return view('welcome');
+});
 
-// Rute untuk Admin
+// 2. Rute Auth (Login/Register - otomatis dari Breeze)
+require __DIR__.'/auth.php';
+
+// 3. Rute Khusus Admin (Harus Login & Role Admin)
 Route::middleware(['auth', 'role:admin'])->group(function () {
-    // Halaman Utama Admin
+    
+    // Dashboard Utama Admin
     Route::get('/admin/dashboard', [AdminOrderController::class, 'index'])
         ->name('admin.dashboard');
 
-    // Simpan Pesanan (Manual)
-    Route::post('/admin/order/store', [AdminOrderController::class, 'store'])
+    // Simpan Pesanan Baru
+    Route::post('/admin/order', [AdminOrderController::class, 'store'])
         ->name('admin.order.store');
 
-    // Update Status (Sesuai dengan view Anda)
-    Route::patch('/admin/order/update/{order}/{status}', [AdminOrderController::class, 'updateStatus'])
+    // Update Status Pesanan
+    Route::patch('/admin/order/{order}/{status}', [AdminOrderController::class, 'updateStatus'])
         ->name('admin.order.update');
 
     // Hapus Pesanan
-    Route::delete('/admin/order/destroy/{id}', [AdminOrderController::class, 'destroy'])
+    Route::delete('/admin/order/{id}', [AdminOrderController::class, 'destroy'])
         ->name('admin.order.destroy');
 });
