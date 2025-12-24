@@ -6,8 +6,8 @@
     </x-slot>
 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    {{-- SDK Midtrans --}}
-    <script src="{{ config('services.midtrans.snap_url') }}" data-client-key="{{ config('services.midtrans.clientKey') }}"></script>
+    {{-- SDK Midtrans - Menggunakan URL Sandbox langsung agar stabil di Vercel --}}
+    <script src="https://app.sandbox.midtrans.com/snap/snap.js" data-client-key="{{ config('services.midtrans.clientKey') }}"></script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700;800&display=swap');
@@ -64,7 +64,7 @@
                 try {
                     let formData = new FormData(this.$refs.orderForm);
 
-                    // STEP 1: Request Token ke Server (Data belum masuk DB Order permanen)
+                    // STEP 1: Request Token ke Server
                     let response = await fetch('{{ route('order.store') }}', {
                         method: 'POST',
                         body: formData,
@@ -111,15 +111,25 @@
             },
 
             async finalizeOrder(serverResult, originalFormData) {
-                // Tambahkan token dan path file yang sudah terupload ke form
-                originalFormData.append('snap_token', serverResult.snap_token);
-                originalFormData.append('design_file_path', serverResult.design_file); // Mengambil path dari store()
+                // Di Vercel, kita tidak boleh mengirim ulang objek File mentah karena session upload sudah selesai.
+                // Kita buat FormData baru berisi data teks saja.
+                let finalData = new FormData();
+                
+                originalFormData.forEach((value, key) => {
+                    if (!(value instanceof File)) {
+                        finalData.append(key, value);
+                    }
+                });
+
+                // Ambil SNAP Token dan Path File yang sudah sukses di-upload dari serverResult
+                finalData.append('snap_token', serverResult.snap_token);
+                finalData.append('design_file_path', serverResult.design_file); 
 
                 try {
                     // STEP 3: Simpan permanen ke DB
                     let response = await fetch('{{ route('order.finalize') }}', {
                         method: 'POST',
-                        body: originalFormData,
+                        body: finalData,
                         headers: {
                             'X-CSRF-TOKEN': '{{ csrf_token() }}',
                             'Accept': 'application/json'
@@ -133,7 +143,12 @@
                         throw new Error(finalRes.message);
                     }
                 } catch (e) {
-                    Swal.fire('Error', 'Gagal menyimpan pesanan ke database', 'error');
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'DATABASE ERROR',
+                        text: e.message || 'Gagal menyimpan pesanan ke database',
+                        customClass: { popup: 'jarrz-popup' }
+                    });
                     this.loading = false;
                 }
             }
