@@ -8,19 +8,11 @@ use Illuminate\Support\Facades\Log;
 
 class TrimStrings extends Middleware
 {
-    /**
-     * The names of the attributes that should not be trimmed.
-     *
-     * @var array
-     */
     protected $except = [
         'password',
         'password_confirmation',
     ];
 
-    /**
-     * Handle an incoming request.
-     */
     public function handle($request, Closure $next)
     {
         Log::debug('App\\Http\\Middleware\\TrimStrings: handle() called');
