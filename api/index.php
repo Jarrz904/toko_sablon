@@ -1,36 +1,23 @@
 <?php
 
-// 1. Definisikan folder sementara untuk penulisan file
+// 1. Tentukan folder storage sementara
 $storagePath = '/tmp/storage';
 
-// 2. Buat struktur folder secara paksa di memori Vercel
-$directories = [
-    $storagePath . '/framework/views',
-    $storagePath . '/framework/cache',
-    $storagePath . '/framework/sessions',
-    $storagePath . '/bootstrap/cache',
-];
-
-foreach ($directories as $directory) {
-    if (!is_dir($directory)) {
-        mkdir($directory, 0755, true);
+// 2. Buat folder yang diperlukan
+foreach (['/framework/views', '/framework/cache', '/framework/sessions', '/bootstrap/cache'] as $path) {
+    if (!is_dir($storagePath . $path)) {
+        mkdir($storagePath . $path, 0755, true);
     }
 }
 
-// 3. Muat autoloader dan inisialisasi aplikasi
+// 3. Muat aplikasi
 require __DIR__ . '/../vendor/autoload.php';
 $app = require_once __DIR__ . '/../bootstrap/app.php';
 
-// 4. Paksa Laravel menggunakan /tmp untuk semua aktivitas penulisan
+// 4. Paksa Laravel menggunakan /tmp
 $app->useStoragePath($storagePath);
 
-// Tambahkan binding ini untuk memperbaiki error [view]
-$app->register(\Illuminate\View\ViewServiceProvider::class);
-
-// Set jalur compile blade secara manual
-config(['view.compiled' => $storagePath . '/framework/views']);
-
-// 5. Jalankan Kernel
+// 5. Jalankan Kernel (Tanpa memanggil helper config() di sini)
 $kernel = $app->make(Illuminate\Contracts\Http\Kernel::class);
 $response = $kernel->handle(
     $request = Illuminate\Http\Request::capture()
