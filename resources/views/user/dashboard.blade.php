@@ -39,21 +39,20 @@
 
         // --- Alur Pembayaran Terintegrasi (Store -> Midtrans -> Finalize) ---
         async checkout() {
+            if (this.loading) return;
             this.loading = true;
             
             // Siapkan data untuk tahap 1 (Request Token)
             let formData = new FormData();
             
-            // PERBAIKAN: package_name mengambil dari activeTitle (Nama Desain di Katalog)
-            // Ini agar validasi 'required' di Controller terpenuhi sesuai input user
             formData.append('package_name', this.activeTitle); 
             formData.append('quantity', this.qty);
             formData.append('size', this.selectedSize);
             formData.append('notes', this.notes);
             formData.append('total_price', this.totalPrice);
             
-            // Logika File: Cek apakah ada file yang diupload manual
-            const fileInput = document.querySelector('input[name=&quot;design_file&quot;]');
+            // Logika File: Menggunakan x-ref agar lebih akurat di Dashboard yang kompleks
+            const fileInput = this.$refs.designFileInput;
             if (fileInput && fileInput.files[0]) {
                 formData.append('design_file', fileInput.files[0]);
             } else {
@@ -80,19 +79,17 @@
                         onSuccess: (res) => { this.finalizeDatabase(result, formData); },
                         onPending: (res) => { this.finalizeDatabase(result, formData); },
                         onError: (res) => { 
-                            Swal.fire('Gagal', 'Pembayaran gagal', 'error');
+                            Swal.fire('Gagal', 'Pembayaran gagal dilakukan', 'error');
                             this.loading = false;
                         },
                         onClose: () => {
-                            // Kembalikan tombol jika user menutup popup tanpa bayar
                             this.loading = false;
                         }
                     });
                 } else {
-                    // Jika Laravel mengirim error validasi (422) atau error lainnya
+                    // Tangkap pesan error dari Laravel jika ada (misal validasi stok/harga)
                     let errorMsg = result.message;
                     if (result.errors) {
-                        // Gabungkan semua pesan error jika ada banyak (misal: size required, dll)
                         errorMsg = Object.values(result.errors).flat().join(', ');
                     }
                     throw new Error(errorMsg || 'Gagal terhubung ke server pembayaran');
@@ -129,11 +126,11 @@
                     throw new Error(finalRes.message);
                 }
             } catch (e) {
-                Swal.fire('Error', 'Pembayaran berhasil, tapi gagal mencatat pesanan. Silakan hubungi admin.', 'warning');
+                Swal.fire('Error', 'Pembayaran berhasil, tapi gagal mencatat pesanan. Silakan hubungi admin dengan menunjukkan bukti bayar.', 'warning');
                 this.loading = false;
             }
         }
-    }" 
+    }"
     class="bg-[#050505] font-['Space_Grotesk'] antialiased">
         <div class="relative bg-black h-[550px] flex items-center overflow-hidden">
             <div class="absolute inset-0 z-0">
